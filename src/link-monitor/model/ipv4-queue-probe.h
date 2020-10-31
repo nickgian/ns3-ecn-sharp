@@ -23,6 +23,8 @@ public:
 
   void DequeueLogger (Ptr<const Packet> packet);
 
+  void EnqueueLogger (Ptr<const Packet> packet);
+
   void PacketsInQueueLogger (uint32_t oldValue, uint32_t newValue);
 
   void BytesInQueueLogger (uint32_t oldValue, uint32_t newValue);

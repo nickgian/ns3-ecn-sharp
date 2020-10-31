@@ -161,7 +161,7 @@ void OnOffApplication::StartApplication () // Called at time specified by Start
           m_socket->Bind ();
         }
       m_socket->Connect (m_peer);
-      m_socket->SetAllowBroadcast (true);
+      m_socket->SetAllowBroadcast (false);
       m_socket->ShutdownRecv ();
 
       m_socket->SetConnectCallback (

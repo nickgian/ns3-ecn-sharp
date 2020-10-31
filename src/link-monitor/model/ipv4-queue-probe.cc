@@ -48,6 +48,13 @@ Ipv4QueueProbe::DequeueLogger (Ptr<const Packet> packet)
 }
 
 void
+Ipv4QueueProbe::EnqueueLogger (Ptr<const Packet> packet)
+{
+  NS_LOG_FUNCTION (this);
+  m_ipv4LinkProbe->EnqueueLogger (packet, m_interfaceId);
+}
+
+void
 Ipv4QueueProbe::PacketsInQueueLogger (uint32_t oldValue, uint32_t newValue)
 {
   NS_LOG_FUNCTION (this);

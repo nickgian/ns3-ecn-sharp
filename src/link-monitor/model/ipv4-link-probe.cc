@@ -27,7 +27,8 @@ Ipv4LinkProbe::GetTypeId (void)
 
 Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor)
     :LinkProbe (linkMonitor),
-     m_checkTime (MicroSeconds (100))
+     m_checkTime (MicroSeconds (50)),
+     m_attackerAddress(Ipv4Address::GetZero())
 {
   NS_LOG_FUNCTION (this);
 
@@ -40,6 +41,7 @@ Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor)
     m_accumulatedDequeueBytes[interface] = 0;
     m_NPacketsInQueue[interface] = 0;
     m_NBytesInQueue[interface] = 0;
+    m_NAttackerPacketsInQueue[interface] = 0;
     m_NPacketsInQueueDisc[interface] = 0;
     m_NBytesInQueueDisc[interface] = 0;
 
@@ -71,6 +73,69 @@ Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor)
     oss5 << "/NodeList/" << node->GetId () << "/$ns3::TrafficControlLayer/RootQueueDiscList/" << interface << "/BytesInQueue";
     Config::ConnectWithoutContext (oss5.str (),
             MakeCallback (&Ipv4QueueProbe::BytesInQueueDiscLogger, m_queueProbe[interface]));
+  }
+
+  if (!m_ipv4->TraceConnectWithoutContext ("Tx",
+              MakeCallback (&Ipv4LinkProbe::TxLogger, this)))
+  {
+    NS_FATAL_ERROR ("trace fail");
+  }
+
+}
+
+Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor, Ipv4Address attackerAddress)
+    :LinkProbe (linkMonitor),
+     m_checkTime (MicroSeconds (50)),
+     m_attackerAddress (attackerAddress)
+{
+  NS_LOG_FUNCTION (this);
+
+  m_ipv4 = m_ipv4 = node->GetObject<Ipv4L3Protocol> ();
+
+  // Notice, the interface at 0 is loopback, we simply ignore it
+  for (uint32_t interface = 1; interface < m_ipv4->GetNInterfaces (); ++interface)
+  {
+    m_accumulatedTxBytes[interface] = 0;
+    m_accumulatedDequeueBytes[interface] = 0;
+    m_NPacketsInQueue[interface] = 0;
+    m_NBytesInQueue[interface] = 0;
+    m_NAttackerPacketsInQueue[interface] = 0;
+    m_NPacketsInQueueDisc[interface] = 0;
+    m_NBytesInQueueDisc[interface] = 0;
+
+    m_queueProbe[interface] = Create<Ipv4QueueProbe> ();
+    m_queueProbe[interface]->SetInterfaceId (interface);
+    m_queueProbe[interface]->SetIpv4LinkProbe (this);
+
+    std::ostringstream oss;
+    oss << "/NodeList/" << node->GetId () << "/DeviceList/" << interface << "/TxQueue/Dequeue";
+    Config::ConnectWithoutContext (oss.str (),
+            MakeCallback (&Ipv4QueueProbe::DequeueLogger, m_queueProbe[interface]));
+
+    std::ostringstream oss2;
+    oss2 << "/NodeList/" << node->GetId () << "/DeviceList/" << interface << "/TxQueue/PacketsInQueue";
+    Config::ConnectWithoutContext (oss2.str (),
+            MakeCallback (&Ipv4QueueProbe::PacketsInQueueLogger, m_queueProbe[interface]));
+
+    std::ostringstream oss3;
+    oss3 << "/NodeList/" << node->GetId () << "/DeviceList/" << interface << "/TxQueue/BytesInQueue";
+    Config::ConnectWithoutContext (oss3.str (),
+            MakeCallback (&Ipv4QueueProbe::BytesInQueueLogger, m_queueProbe[interface]));
+
+    std::ostringstream oss4;
+    oss4 << "/NodeList/" << node->GetId () << "/$ns3::TrafficControlLayer/RootQueueDiscList/" << interface << "/PacketsInQueue";
+    Config::ConnectWithoutContext (oss4.str (),
+            MakeCallback (&Ipv4QueueProbe::PacketsInQueueDiscLogger, m_queueProbe[interface]));
+
+    std::ostringstream oss5;
+    oss5 << "/NodeList/" << node->GetId () << "/$ns3::TrafficControlLayer/RootQueueDiscList/" << interface << "/BytesInQueue";
+    Config::ConnectWithoutContext (oss5.str (),
+            MakeCallback (&Ipv4QueueProbe::BytesInQueueDiscLogger, m_queueProbe[interface]));
+
+    std::ostringstream oss6;
+    oss6 << "/NodeList/" << node->GetId () << "/DeviceList/" << interface << "/TxQueue/Enqueue";
+    Config::ConnectWithoutContext (oss.str (),
+            MakeCallback (&Ipv4QueueProbe::EnqueueLogger, m_queueProbe[interface]));
 
   }
 
@@ -104,6 +169,37 @@ Ipv4LinkProbe::DequeueLogger (Ptr<const Packet> packet, uint32_t interface)
   uint32_t size = packet->GetSize ();
   NS_LOG_LOGIC ("Trace " << size << " bytes dequeued on port: " << interface);
   m_accumulatedDequeueBytes[interface] = m_accumulatedDequeueBytes[interface] + size;
+
+  // Also reduce the number of attacker packets when one gets dequeued.
+  if (!m_attackerAddress.IsEqual(Ipv4Address::GetZero())) { 
+    Ptr<Packet> copy = packet->Copy ();
+    Ipv4Header iph;
+    copy->RemoveHeader (iph);
+
+    std::stringstream log;
+    iph.GetDestination().Print(log);
+    log << "dequeued packet with source";
+    NS_LOG_LOGIC (log.str());
+    if ((iph.GetSource().IsEqual(m_attackerAddress)))
+    {  
+      NS_LOG_LOGIC ("Dequed attacker packet!");
+      m_NAttackerPacketsInQueue[interface] = m_NAttackerPacketsInQueue[interface] - 1;
+    }
+  }
+}
+
+void
+Ipv4LinkProbe::EnqueueLogger (Ptr<const Packet> packet, uint32_t interface)
+{
+  NS_LOG_LOGIC ("Packet queued on port: " << interface);
+  Ptr<Packet> copy = packet->Copy ();
+  Ipv4Header iph;
+  copy->RemoveHeader (iph);
+  if (iph.GetSource().IsEqual(m_attackerAddress))
+  {  
+    NS_LOG_LOGIC ("Logged as attacker packet!");
+    m_NAttackerPacketsInQueue[interface] = m_NAttackerPacketsInQueue[interface] + 1;
+  }
 }
 
 void
@@ -155,6 +251,7 @@ Ipv4LinkProbe::CheckCurrentStatus ()
           Ipv4LinkProbe::GetLinkUtility (interface, m_accumulatedDequeueBytes[interface] - lastDequeueBytes, m_checkTime);
       newStats.packetsInQueue = m_NPacketsInQueue[interface];
       newStats.bytesInQueue = m_NBytesInQueue[interface];
+      newStats.attackerPacketsInQueue = m_NAttackerPacketsInQueue[interface];
       newStats.packetsInQueueDisc = m_NPacketsInQueueDisc[interface];
       newStats.bytesInQueueDisc = m_NBytesInQueueDisc[interface];
       std::vector<struct LinkProbe::LinkStats> newVector;
@@ -175,6 +272,7 @@ Ipv4LinkProbe::CheckCurrentStatus ()
           Ipv4LinkProbe::GetLinkUtility (interface, m_accumulatedDequeueBytes[interface] - lastDequeueBytes, m_checkTime);
       newStats.packetsInQueue = m_NPacketsInQueue[interface];
       newStats.bytesInQueue = m_NBytesInQueue[interface];
+      newStats.attackerPacketsInQueue = m_NAttackerPacketsInQueue[interface];
       newStats.packetsInQueueDisc = m_NPacketsInQueueDisc[interface];
       newStats.bytesInQueueDisc = m_NPacketsInQueueDisc[interface];
       (itr->second).push_back (newStats);

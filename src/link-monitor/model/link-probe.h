@@ -20,7 +20,7 @@ public:
   struct LinkStats
   {
     // The check time
-    Time        checkTime;
+    Time        checkTime; // Checking flows every 50us - is that a good value for flowlet gap of 250us?
 
     // The accumulated bytes transmitted on this link
     uint64_t    accumulatedTxBytes;
@@ -38,7 +38,9 @@ public:
 
     uint32_t    bytesInQueue;
 
-    uint32_t    packetsInQueueDisc;
+    uint32_t    attackerPacketsInQueue;
+
+    uint32_t    packetsInQueueDisc; // What's this?
 
     uint32_t    bytesInQueueDisc;
   };

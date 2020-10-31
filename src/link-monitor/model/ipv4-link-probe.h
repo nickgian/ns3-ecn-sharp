@@ -22,6 +22,8 @@ public:
 
   Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor);
 
+  Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor, Ipv4Address);
+
   void SetDataRateAll (DataRate dataRate);
 
   void SetCheckTime (Time checkTime);
@@ -29,6 +31,8 @@ public:
   void TxLogger (Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interface);
 
   void DequeueLogger (Ptr<const Packet> packet, uint32_t interface);
+
+  void EnqueueLogger (Ptr<const Packet> packet, uint32_t interface);
 
   void PacketsInQueueLogger (uint32_t NPackets, uint32_t interface);
 
@@ -59,12 +63,16 @@ private:
   std::map<uint32_t, uint32_t> m_NPacketsInQueue;
   std::map<uint32_t, uint32_t> m_NBytesInQueue;
 
+  std::map<uint32_t, uint32_t> m_NAttackerPacketsInQueue;
+
   std::map<uint32_t, uint32_t> m_NPacketsInQueueDisc;
   std::map<uint32_t, uint32_t> m_NBytesInQueueDisc;
 
   std::map<uint32_t, DataRate> m_dataRate;
 
   Ptr<Ipv4L3Protocol> m_ipv4;
+
+  Ipv4Address m_attackerAddress;
 };
 
 }
