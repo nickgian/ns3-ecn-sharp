@@ -110,6 +110,7 @@ bool Ipv4LetFlowRouting::RouteInput(
   // LetFlow routing only supports unicast
   if (destAddress.IsMulticast() || destAddress.IsBroadcast()) {
     NS_LOG_ERROR(this << " LetFlow routing only supports unicast");
+    std::cout<< "hits broadcast case";
     ecb(packet, header, Socket::ERROR_NOROUTETOHOST);
     return false;
   }
