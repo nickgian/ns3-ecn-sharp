@@ -75,9 +75,10 @@ class Ipv4LetFlowRouting : public Ipv4RoutingProtocol {
   void EnableLetFlowHistory(Ipv4Address attacker);
   LetFlowHistory GetLetFlowHistory(void);
 
-  // Returns  vector of time, port selected for attacker flow, and a map from
-  // ports to flow counts.
-  std::vector<std::pair<Time, std::pair<uint32_t, std::map<uint32_t, int> > > >
+  // Returns  vector of time, port selected for each attacker flow (map from
+  // attacker flowId to port), and a map from ports to flow counts.
+  std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
+                                        std::map<uint32_t, int> > > >
   ComputeNumberOfFlowsPerPort(void);
 
  private:
@@ -100,7 +101,7 @@ class Ipv4LetFlowRouting : public Ipv4RoutingProtocol {
   Ipv4Address m_attackerAddress;
 
   // Attacker flow id
-  uint32_t m_attackerFlowId;
+  std::set<uint32_t> m_attackerFlowId;
 };
 
 }  // namespace ns3

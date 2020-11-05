@@ -154,7 +154,7 @@ bool Ipv4LetFlowRouting::RouteInput(
 
   Ipv4Address sourceAddress = header.GetSource();
   if (sourceAddress == m_attackerAddress) {
-    m_attackerFlowId = flowId;
+    m_attackerFlowId.insert(flowId);
   }
 
   std::vector<LetFlowRouteEntry> routeEntries =
@@ -191,7 +191,10 @@ bool Ipv4LetFlowRouting::RouteInput(
   }
 
   // Not hit. Random Select the Port
-  selectedPort = routeEntries[rand() % routeEntries.size()].port;
+  int randPort = rand () % routeEntries.size();
+  NS_LOG_LOGIC(this << "At Time: " << now.As(Time::MS) << " generated random number: " << 
+                randPort << " for " << routeEntries.size() << " entries");
+  selectedPort = routeEntries[randPort].port;
 
   LetFlowFlowlet flowlet;
 
@@ -237,20 +240,22 @@ LetFlowHistory Ipv4LetFlowRouting::GetLetFlowHistory() {
   return m_letFlowHistory;
 }
 
-// Returns a vector showing how many flows are on each port at every sample,
-// i.e. the map is from ports to number of flows
-std::vector<std::pair<Time, std::pair<uint32_t, std::map<uint32_t, int> > > >
+// Returns a vector showing how many flows are on each port at every sample.
+// First map is attacker flow id to port
+// Seecond map is port to number of flows.
+std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>, std::map<uint32_t, int> > > >
 Ipv4LetFlowRouting::ComputeNumberOfFlowsPerPort() {
   std::vector<std::pair<Time, std::map<uint32_t, LetFlowFlowlet> > >
       *tableHistory = &m_letFlowHistory.flowTableHistory;
-  std::vector<std::pair<Time, std::pair<uint32_t, std::map<uint32_t, int> > > >
+  std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
+                                        std::map<uint32_t, int> > > >
       result;
 
   // Iterate over the history vector
   for (uint i = 0; i < tableHistory->size(); i++) {
     // Given a map from flowId to Flowlets, compute a map from port to frequency
     std::map<uint32_t, int> portFreq;
-    uint32_t attackerPort = 0;
+    std::map<uint32_t, uint32_t> attackerPorts;
 
     std::map<uint32_t, LetFlowFlowlet>::iterator it =
         (*tableHistory)[i].second.begin();
@@ -266,15 +271,16 @@ Ipv4LetFlowRouting::ComputeNumberOfFlowsPerPort() {
         // Otherwise initialize it to 1.
         portFreq.insert(std::pair<uint32_t, int>(port, 1));
       }
-      if (it->first == m_attackerFlowId) {
-        attackerPort = port;
+      if (m_attackerFlowId.count(it->first) != 0) {
+        // If it->first is an attacker flow then add it's port to the result map.
+        attackerPorts.insert(std::pair<uint32_t, int>(it->first, port));
       }
       it++;
     }
     // Store the new map in the result vector.
     result.insert(result.begin(),
                   std::make_pair((*tableHistory)[i].first,
-                                 std::make_pair(attackerPort, portFreq)));
+                                 std::make_pair(attackerPorts, portFreq)));
   }
   return result;
 }

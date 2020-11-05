@@ -48,7 +48,7 @@ extern "C"
 
 #define PRESTO_RATIO 10
 
-using namespace ns3;
+    using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("LetFlowConvergence");
 
@@ -275,26 +275,36 @@ RunMode parseRunMode(std::string runModeStr)
   }
 }
 
-/* Out log file relating to flows */
+/* Output log file relating ports to flows.
+  Takes as input a filename, a vector of pairs of
+  time of sample, a pair of two maps:
+  - the first one maps attacker flow Ids to ports
+  - and the second one maps ports to number of flows on them.
+  and a set of ports that we want to log.
+*/
 void outputFlowLog(
     std::string filename,
-    std::vector<
-        std::pair<Time, std::pair<uint32_t, std::map<uint32_t, int> > > >
+    std::vector<std::pair<
+        Time, std::pair<std::map<uint32_t, uint32_t>, std::map<uint32_t, int> > > >
         flowsPerPort,
-    std::set<uint32_t> ports)
-{
+    std::set<uint32_t> ports) {
   std::ofstream logfile;
   logfile.open(filename.c_str());
 
-  for (std::vector<
-           std::pair<Time, std::pair<uint32_t, std::map<uint32_t, int> > > >::
+  for (std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
+                                             std::map<uint32_t, int> > > >::
            const_iterator i = flowsPerPort.begin();
-       i != flowsPerPort.end(); ++i)
-  {
+       i != flowsPerPort.end(); ++i) {
     // Print time
-    logfile << i->first.As(Time::MS) << ", ";
-    // Attacker's flow selected port
-    logfile << i->second.first;
+    logfile << i->first.As(Time::MS);
+    // Attacker's flows selected ports
+
+    for (std::map<uint32_t, uint32_t>::const_iterator j =
+             (i->second.first).begin();
+         j != (i->second.first).end(); ++j) {
+      // Using tilde for attacker ports
+      logfile << ", " << j->first << "~" << j->second;
+    }
 
     // Flows per port
     for (std::map<uint32_t, int>::const_iterator j = (i->second.second).begin();
@@ -302,6 +312,7 @@ void outputFlowLog(
     {
       if (ports.count(j->first) != 0)
       {
+        // Using ':' for port to flows.
         logfile << ", " << j->first << ":" << j->second;
       }
     }
@@ -377,7 +388,7 @@ int main(int argc, char *argv[])
   cmd.AddValue("flowSize", "The size of the flow hosts generate", flowSize);
   cmd.AddValue("attackerOnTime",
                "How long the attacker should send packets until he pauses in "
-               "Microseconds (UDP), or number of packets until pause (TCP)",
+               "Microseconds (OnOff), or number of packets until pause (Bulk)",
                onTime);
   cmd.AddValue("attackerOffTime",
                "The time for an attacker pause, in Microseconds", offTime);
@@ -677,7 +688,7 @@ int main(int argc, char *argv[])
   Ptr<LinkMonitor> linkMonitor = Create<LinkMonitor>();
   Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaf0, linkMonitor, compromisedAddress);
   linkProbe->SetProbeName("Leaf 0");
-  linkProbe->SetCheckTime(MicroSeconds(50)); 
+  linkProbe->SetCheckTime(MicroSeconds(10)); 
   linkProbe->SetDataRateAll(DataRate(LINK_TWO_CAPACITY));
   linkMonitor->Start(Seconds(startTime));
   linkMonitor->Stop(Seconds(END_TIME));
@@ -692,30 +703,30 @@ int main(int argc, char *argv[])
   std::stringstream linkMonitorFilename;
   std::stringstream flowLoggingFilename;
 
-  flowMonitorFilename << id << "-letflow-convergence-" << linkOneCapacity << "-"
+  flowMonitorFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
                       << linkTwoCapacity << "-" << SERVER_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
                       << letFlowFlowletTimeout << "-" << flowSize << "-"
-                      << (hostile == 0 ? "no-attacker" : "attacker") << "-"
+                      << (hostile == 0 ? "no_attacker" : "attacker") << "-"
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
                       << hostileFlows << ".xml";
-  linkMonitorFilename << id << "-letflow-convergence-" << linkOneCapacity << "-"
+  linkMonitorFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
                       << linkTwoCapacity << "-" << SERVER_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
                       << letFlowFlowletTimeout << "-" << flowSize << "-"
-                      << (hostile == 0 ? "no-attacker" : "attacker") << "-"
+                      << (hostile == 0 ? "no_attacker" : "attacker") << "-"
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
                       << hostileFlows << ".out";
 
-  flowLoggingFilename << id << "-letflow-convergence-" << linkOneCapacity << "-"
+  flowLoggingFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
                       << linkTwoCapacity << "-" << SERVER_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
                       << letFlowFlowletTimeout << "-" << flowSize << "-"
-                      << (hostile == 0 ? "no-attacker" : "attacker") << "-"
+                      << (hostile == 0 ? "no_attacker" : "attacker") << "-"
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
@@ -750,7 +761,8 @@ int main(int argc, char *argv[])
       letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>());
 
   assert(letFlowLeaf0->GetLetFlowHistory().enabled);
-  std::vector<std::pair<Time, std::pair<uint32_t, std::map<uint32_t, int> > > >
+  std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
+                                        std::map<uint32_t, int> > > >
       flows0 = letFlowLeaf0->ComputeNumberOfFlowsPerPort();
 
   // Ports we are interested in

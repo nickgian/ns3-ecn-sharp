@@ -225,8 +225,10 @@ void BulkSendApplication::SendData (void)
           break;
         }
 
-      if (m_delayThresh != 0 && m_accumPackets > m_delayThresh)
-        {
+        if (m_delayThresh != 0) { 
+          NS_LOG_LOGIC("accumulated packets: " << m_accumPackets << "and thresh is: " << m_delayThresh);
+        }
+        if (m_delayThresh != 0 && m_accumPackets > m_delayThresh) {
           m_isDelay = true;
           Simulator::Schedule (m_delayTime, &BulkSendApplication::ResumeSend, this);
         }
