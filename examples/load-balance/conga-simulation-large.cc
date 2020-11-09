@@ -29,7 +29,7 @@ extern "C" {
 }
 
 #define LINK_CAPACITY_BASE 1000000000  // 1Gbps
-#define BUFFER_SIZE 600                // 250 packets
+#define BUFFER_SIZE 250                // 250 packets
 
 #define RED_QUEUE_MARKING 65  // 65 Packets (available only in DcTcp)
 
@@ -260,18 +260,15 @@ void sendFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
   sinkApp.Start(Seconds(START_TIME));
   sinkApp.Stop(Seconds(END_TIME));
 
-  /*
-          NS_LOG_INFO ("\tFlow from server: " << fromServerIndex << " to server:
-     "
-                  << destServerIndex << " on port: " << port << " with flow
-     size: "
-                  << flowSize << " [start time: " << startTime <<"]");
-          */
+  
+    //       NS_LOG_INFO ("\tFlow from server: " << fromServerIndex << " to server:" << destServerIndex << " on port: " << port << " with flow
+    //  size: " << flowSize << " [start time: " << startTime <<"]");
+        
 }
 
 void sendHostileFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
                      double startTime, long &flowCount, long &totalFlowSize,
-                     int SERVER_COUNT, int LEAF_COUNT, double START_TIME,
+                     int SERVER_COUNT, int LEAF_COUNT,
                      double END_TIME, struct cdf_table *cdfTable,
                      uint32_t flowSize, uint32_t offTime, uint32_t onTime,
                      int rate) {
@@ -289,13 +286,12 @@ void sendHostileFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
   Ipv4InterfaceAddress destInterface = ipv4->GetAddress(1, 0);
   Ipv4Address destAddress = destInterface.GetLocal();
 
-  OnOffHelper source = OnOffHelper("ns3::UdpSocketFactory",
+  OnOffHelper source = OnOffHelper("ns3::TcpSocketFactory",
                                    InetSocketAddress(destAddress, port));
 
   /* Compute off time */
   double offTimed = (double(offTime) / 1000000);
 
-  printf("%f", offTimed);
   std::stringstream offTimeStr;
 
   offTimeStr << "ns3::ConstantRandomVariable[Constant=" << offTimed << "]";
@@ -303,7 +299,6 @@ void sendHostileFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
   /* Compute on time */
   double onTimed = (double(onTime) / 1000000);
 
-  printf("%f", onTimed);
   std::stringstream onTimeStr;
   onTimeStr << "ns3::ConstantRandomVariable[Constant=" << onTimed << "]";
 
@@ -322,10 +317,10 @@ void sendHostileFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
   sourceApp.Stop(Seconds(END_TIME));
 
   // Install packet sinks
-  PacketSinkHelper sink("ns3::UdpSocketFactory",
+  PacketSinkHelper sink("ns3::TcpSocketFactory",
                         InetSocketAddress(Ipv4Address::GetAny(), port));
   ApplicationContainer sinkApp = sink.Install(servers.Get(destServerIndex));
-  sinkApp.Start(Seconds(START_TIME));
+  sinkApp.Start(Seconds(startTime));
   sinkApp.Stop(Seconds(END_TIME));
 
   /*
@@ -373,21 +368,21 @@ void install_applications(int fromLeafId, NodeContainer servers,
       for (int i = 0; i < hostileFlows; i++) {
         sendHostileFlow(fromLeafId, servers, fromServerIndex, startTime,
                         flowCount, totalFlowSize, SERVER_COUNT, LEAF_COUNT,
-                        START_TIME, END_TIME, cdfTable, flowSize, offTime,
+                        END_TIME, cdfTable, flowSize, offTime,
                         onTime, rate);
         startTime += poission_gen_interval(requestRate);
       }
     } else {
       while (startTime < FLOW_LAUNCH_END_TIME) {
         flowSize = gen_random_cdf(cdfTable);
-        sendHostileFlow(fromLeafId, servers, fromServerIndex, startTime,
-                        flowCount, totalFlowSize, SERVER_COUNT, LEAF_COUNT,
-                        START_TIME, END_TIME, cdfTable, flowSize, offTime,
-                        onTime, rate);
-        // sendFlow(fromLeafId, servers, fromServerIndex, startTime, flowCount,
-        //          totalFlowSize, SERVER_COUNT, LEAF_COUNT, START_TIME,
-        //          END_TIME, cdfTable, flowSize, applicationPauseThresh,
-        //          applicationPauseTime);
+        // sendHostileFlow(fromLeafId, servers, fromServerIndex, startTime,
+        //                 flowCount, totalFlowSize, SERVER_COUNT, LEAF_COUNT,
+        //                 END_TIME, cdfTable, flowSize, offTime,
+        //                 onTime, rate);
+        sendFlow(fromLeafId, servers, fromServerIndex, startTime, flowCount,
+                 totalFlowSize, SERVER_COUNT, LEAF_COUNT, START_TIME,
+                 END_TIME, cdfTable, flowSize, applicationPauseThresh,
+                 applicationPauseTime);
         startTime += poission_gen_interval(requestRate);
       }
     }
@@ -464,9 +459,9 @@ int main(int argc, char *argv[]) {
 
   // The simulation starting and ending time
   double START_TIME = 0.0;
-  double END_TIME = 0.25;
+  double END_TIME = 4;
 
-  double FLOW_LAUNCH_END_TIME = 0.1;
+  double FLOW_LAUNCH_END_TIME = 0.5;
 
   uint32_t linkLatency = 10;
 
@@ -936,12 +931,7 @@ int main(int argc, char *argv[]) {
     internet.Install(spines);
     internet.Install(leaves);
   } else if (runMode == LetFlow) {
-    // internet.SetRoutingHelper(staticRoutingHelper);
-    // internet.Install(servers);
-
-    internet.SetRoutingHelper(globalRoutingHelper);
-    Config::SetDefault("ns3::Ipv4GlobalRouting::PerflowEcmpRouting",
-                       BooleanValue(true));
+    internet.SetRoutingHelper(staticRoutingHelper);
     internet.Install(servers);
 
     internet.SetRoutingHelper(letFlowRoutingHelper);
@@ -1068,12 +1058,10 @@ int main(int argc, char *argv[]) {
 
       if (runMode == LetFlow) {
         // All servers just forward the packet to leaf switch
-        // staticRoutingHelper
-        //     .GetStaticRouting(servers.Get(serverIndex)->GetObject<Ipv4>())
-        //     ->AddNetworkRouteTo(Ipv4Address("0.0.0.0"), Ipv4Mask("0.0.0.0"),
-        //                         netDeviceContainer.Get(1)->GetIfIndex());
-
-        Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+        staticRoutingHelper
+            .GetStaticRouting(servers.Get(serverIndex)->GetObject<Ipv4>())
+            ->AddNetworkRouteTo(Ipv4Address("0.0.0.0"), Ipv4Mask("0.0.0.0"),
+                                netDeviceContainer.Get(1)->GetIfIndex());
 
         Ptr<Ipv4LetFlowRouting> letFlowLeaf =
             letFlowRoutingHelper.GetLetFlowRouting(
@@ -1556,10 +1544,12 @@ int main(int argc, char *argv[]) {
 
   flowMonitorFilename << id << "-1-large-load-" << LEAF_COUNT << "X"
                       << SPINE_COUNT << "-" << load << "-" << transportProt
-                      << "-" << hostile << "-" << hostileFlowSize << "-";
+                      << "-" << (hostile == 0 ? "no_attacker" : "attacker")
+                      << "-" << hostileFlowSize << "-";
   linkMonitorFilename << id << "-1-large-load-" << LEAF_COUNT << "X"
                       << SPINE_COUNT << "-" << load << "-" << transportProt
-                      << "-" << hostile << "-" << hostileFlowSize << "-";
+                      << "-" << (hostile == 0 ? "no_attacker" : "attacker")
+                      << "-" << hostileFlowSize << "-";
   tlbBibleFilename << id << "-1-large-load-" << LEAF_COUNT << "X" << SPINE_COUNT
                    << "-" << load << "-" << transportProt << "-";
   tlbBibleFilename2 << id << "-1-large-load-" << LEAF_COUNT << "X"
@@ -1735,8 +1725,8 @@ int main(int argc, char *argv[]) {
   Simulator::Run();
 
   /* Print FlowMonitor output */
-  std::stringstream flowMonitorString;
-  std::set<int>::iterator it = compromised.begin();
+ std::stringstream flowMonitorString;
+ std::set<int>::iterator it = compromised.begin();
 
   // Add compromised servers list at top of flow file.
   flowMonitorString << "<Sim>\n";

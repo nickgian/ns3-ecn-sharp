@@ -259,12 +259,13 @@ def main(argv):
                 flow_fct[t.sourceAddress].insert(0,flow.fct)
 
 
-    print(flow_freq)
-    print(flow_fct)
+    # print(flow_freq)
+    # print(flow_fct)
     print "---------------\n"
     print "Sender Worst FCT: %.4f" % worst_fct_sender
-    print "Sender Avg Flow Size: %.4f" % (total_flow_tx_sender / total_flow_count_sender)
-    print "Sender Avg FCT: %.4f" % (total_fct_sender / total_flow_count_sender)
+    if total_flow_count_sender != 0:
+        print "Sender Avg Flow Size: %.4f" % (total_flow_tx_sender / total_flow_count_sender)
+        print "Sender Avg FCT: %.4f" % (total_fct_sender / total_flow_count_sender)
     if large_flow_count_sender == 0:
         print "No large flows from sender"
     else:    
@@ -275,7 +276,7 @@ def main(argv):
     else:     
         print "Small Flow Sender Avg FCT: %.4f" % (small_flow_total_fct_sender / small_flow_count_sender)
     
-    print "Worst FCT: %.4f" % worst_fct
+    # print "Worst FCT: %.4f" % worst_fct
     print "Avg Flow Size: %.4f" % (total_flow_tx / flow_count)
     print "Avg FCT: %.4f\n" % (total_fct / flow_count)
     if large_flow_count == 0:
@@ -297,12 +298,12 @@ def main(argv):
         if attacker_large_flow_count == 0:
 	        print "No large flows from the attacker"
         else:    
-            print "Large Flow Avg FCT: %.4f" % (attacker_large_flow_total_fct / attacker_large_flow_count)
+            print "Attacker Large Flow Avg FCT: %.4f" % (attacker_large_flow_total_fct / attacker_large_flow_count)
    
         if attacker_small_flow_count == 0:
    	        print "No small flows from the attacker"
         else:     
-	        print "Small Flow Avg FCT: %.4f" % (attacker_small_flow_total_fct / attacker_small_flow_count)
+	        print "Attacker Small Flow Avg FCT: %.4f" % (attacker_small_flow_total_fct / attacker_small_flow_count)
         
         print "Total TX Packets Attacker: %i" % attacker_total_packets
         print "Total RX Packets Atacker: %i" % attacker_total_rx_packets
@@ -310,4 +311,3 @@ def main(argv):
 
 if __name__ == '__main__':
     main(sys.argv)
-

@@ -43,6 +43,9 @@ public:
     uint32_t    packetsInQueueDisc; // What's this?
 
     uint32_t    bytesInQueueDisc;
+
+    // Per flow packet/byte transmission on every sample.
+    std::map<uint32_t, std::pair<uint32_t, uint32_t> > txFlow;
   };
 
   static TypeId GetTypeId (void);

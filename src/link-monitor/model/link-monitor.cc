@@ -108,7 +108,13 @@ LinkMonitor::DefaultFormat (struct LinkProbe::LinkStats stat)
       << stat.bytesInQueue << ", "
       << stat.attackerPacketsInQueue << ", "
       << stat.packetsInQueueDisc << ", "
-      << stat.bytesInQueueDisc << "\n";
+      << stat.bytesInQueueDisc;
+
+  for (std::map<uint32_t, std::pair<uint32_t, uint32_t> >::iterator it = stat.txFlow.begin(); 
+        it != stat.txFlow.end(); ++it) {
+          oss << ", " << it->first << ":" << it->second.first;
+        }
+  oss << "\n";
   return oss.str ();
 }
 

@@ -2,12 +2,12 @@
 
 #include "ipv4-link-probe.h"
 
-#include "ns3/log.h"
-#include "ns3/config.h"
-#include "ns3/simulator.h"
-#include "ns3/ipv4-header.h"
-
 #include "link-monitor.h"
+#include "ns3/config.h"
+#include "ns3/flow-id-tag.h"
+#include "ns3/ipv4-header.h"
+#include "ns3/log.h"
+#include "ns3/simulator.h"
 
 namespace ns3 {
 
@@ -45,7 +45,10 @@ Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor)
     m_NPacketsInQueueDisc[interface] = 0;
     m_NBytesInQueueDisc[interface] = 0;
 
-    m_queueProbe[interface] = Create<Ipv4QueueProbe> ();
+    std::map<uint32_t, std::pair<uint32_t, uint32_t> > flowTxMap;
+    m_flowTx[interface] = flowTxMap;
+
+    m_queueProbe[interface] = Create<Ipv4QueueProbe>();
     m_queueProbe[interface]->SetInterfaceId (interface);
     m_queueProbe[interface]->SetIpv4LinkProbe (this);
 
@@ -102,6 +105,8 @@ Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor, Ipv4
     m_NAttackerPacketsInQueue[interface] = 0;
     m_NPacketsInQueueDisc[interface] = 0;
     m_NBytesInQueueDisc[interface] = 0;
+    std::map<uint32_t, std::pair<uint32_t, uint32_t> > flowTxMap;
+    m_flowTx[interface] = flowTxMap;
 
     m_queueProbe[interface] = Create<Ipv4QueueProbe> ();
     m_queueProbe[interface]->SetInterfaceId (interface);
@@ -161,6 +166,54 @@ Ipv4LinkProbe::TxLogger (Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t inte
   uint32_t size = packet->GetSize ();
   NS_LOG_LOGIC ("Trace " << size << " bytes TX on port: " << interface);
   m_accumulatedTxBytes[interface] = m_accumulatedTxBytes[interface] + size;
+
+  // Per flow logging
+  FlowIdTag flowIdTag;
+  bool flowIdFound = packet->PeekPacketTag(flowIdTag);
+  std::map<uint32_t, std::map<uint32_t, std::pair<uint32_t, uint32_t> > >::iterator flowTxIt = m_flowTx.find(interface);
+
+  if (!flowIdFound) {
+    NS_LOG_ERROR(this << " Cannot extract the flow id");
+  }
+  else {
+    uint32_t flowId = flowIdTag.GetFlowId();
+    NS_LOG_LOGIC(this << "Logging packet for FlowId:" << flowId);
+    std::map<uint32_t, std::pair<uint32_t, uint32_t> >::iterator it = flowTxIt->second.find(flowId);
+    if (it != flowTxIt->second.end()) {
+      NS_LOG_LOGIC(this << "FlowId found, bytes: " << it->second.first +size);
+      it -> second = std::make_pair(it->second.first + size, it->second.second + 1);
+    } else {
+      NS_LOG_LOGIC(this << "No entry for this flowId");
+      flowTxIt->second.insert(it, std::map<uint32_t, std::pair<uint32_t, uint32_t> >::value_type(flowId, 
+              std::make_pair(size, 1)));
+    }
+    NS_LOG_LOGIC(this << " TX packets in interface " << interface << "for " << flowId << " are " << it->second.second);
+  }
+
+  // std::map<uint32_t,
+  //          std::map<uint32_t, std::pair<uint32_t, uint32_t> > >::iterator
+  //     flowTxIt = m_flowTx.find(interface);
+
+  // if (!flowIdFound) {
+  //   NS_LOG_ERROR(this << " Cannot extract the flow id");
+  // } else {
+  //   uint32_t flowId = flowIdTag.GetFlowId();
+  //   NS_LOG_LOGIC(this << "Logging packet for FlowId:" << flowId);
+  //   std::map<uint32_t, std::pair<uint32_t, uint32_t> >::iterator it =
+  //       flowTxIt->second.find(flowId);
+  //   if (it != flowTxIt->second.end()) {
+  //     NS_LOG_LOGIC(this << "FlowId found, bytes: " << it->second.first + size);
+  //     it->second =
+  //         std::make_pair(it->second.first + size, it->second.second + 1);
+  //   } else {
+  //     NS_LOG_LOGIC(this << "No entry for this flowId");
+  //     flowTxIt->second.insert(
+  //         it, std::map<uint32_t, std::pair<uint32_t, uint32_t> >::value_type(
+  //                 flowId, std::make_pair(size, 1)));
+  //   }
+  //   NS_LOG_LOGIC(this << " TX packets in interface " << interface << "for "
+  //                     << flowId << " are " << it->second.second);
+  // }
 }
 
 void
@@ -254,6 +307,9 @@ Ipv4LinkProbe::CheckCurrentStatus ()
       newStats.attackerPacketsInQueue = m_NAttackerPacketsInQueue[interface];
       newStats.packetsInQueueDisc = m_NPacketsInQueueDisc[interface];
       newStats.bytesInQueueDisc = m_NBytesInQueueDisc[interface];
+      newStats.txFlow = m_flowTx[interface];
+      std::map<uint32_t, std::pair<uint32_t, uint32_t> > flowTxMap;
+      m_flowTx[interface] = flowTxMap;
       std::vector<struct LinkProbe::LinkStats> newVector;
       newVector.push_back (newStats);
       m_stats[interface] = newVector;
@@ -275,6 +331,9 @@ Ipv4LinkProbe::CheckCurrentStatus ()
       newStats.attackerPacketsInQueue = m_NAttackerPacketsInQueue[interface];
       newStats.packetsInQueueDisc = m_NPacketsInQueueDisc[interface];
       newStats.bytesInQueueDisc = m_NPacketsInQueueDisc[interface];
+      newStats.txFlow = m_flowTx[interface];
+      std::map<uint32_t, std::pair<uint32_t, uint32_t> > flowTxMap;
+      m_flowTx[interface] = flowTxMap;
       (itr->second).push_back (newStats);
     }
   }

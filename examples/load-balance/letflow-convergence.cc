@@ -91,7 +91,8 @@ void attackerInstallOnOff(
   /* Compute on time */
   double onTimed = (double(onTime) / 1000000);
 
-  printf("%f", onTimed);
+  printf(" %f ", offTimed);
+  printf(" %f ", onTimed);
   std::stringstream onTimeStr;
   onTimeStr << "ns3::ConstantRandomVariable[Constant=" << onTimed << "]";
 
@@ -109,43 +110,6 @@ void attackerInstallOnOff(
  
   sourceApp.Start(MicroSeconds(start_time));
   sourceApp.Stop(Seconds(end_time));
-
-  //  // Disable multicast
-  //  ApplicationContainer::Iterator appIter;
-  //  for (appIter = sourceApp.Begin(); appIter != sourceApp.End(); ++appIter)
-  //  {
-  //    Ptr<Application> appPtr = *appIter;
-  //    Ptr<OnOffApplication> onoff = DynamicCast<OnOffApplication>(appPtr);
-  //    if (onoff)
-  //    {
-  //      Ptr<Socket> sock = onoff->GetSocket();
-  //      if (sock)
-  //      {
-  //        if (sock->SetAllowBroadcast(false))
-  //        {
-  //          std::cout << "Multicast disabled\n";
-  //        }
-  //        {
-  //          std::cout << "Failed to disable multicast\n";
-  //        }
-  //      }
-  //      else
-  //      {
-  //        std::cout << "No pointer to socket\n";
-  //      }
-  //    }
-  //    //   // Ptr<Socket> sock = (*appIter)->GetObject<OnOffApplication>()->GetSocket();
-
-  //    //   if (sock->SetAllowBroadcast(false))
-  //    //   {
-  //    //     std::cout << "Multicast disabled\n";
-  //    //   }
-  //    //   {
-  //    //     std::cout << "Failed to disable multicast\n";
-  //    //   }
-  //    // }
-  //  }
-
 
   // Install packet sinks
   ApplicationContainer sinkApp = sink.Install(destServers.Get(destIndex));
@@ -169,6 +133,12 @@ void install_applications(
     // uint16_t port = PORT_START + i;
     int destIndex = rand_range(0, SERVER_COUNT - 1);
 
+    // Slightly change the start time
+ 
+     Time start_time = MicroSeconds(START_TIME);
+     
+        // Time start_time = MicroSeconds(rand_range(0, 50) + START_TIME);
+
     // Each server sends a flow
 
     if (compromised.count(i))
@@ -180,27 +150,27 @@ void install_applications(
             InetSocketAddress(toAddresses[destIndex].first, port));
 
         // onTime is treated as a number of packets in the TCP case.
-
+        int attackerFlowSize = flowSize / 2;
         source.SetAttribute("SendSize", UintegerValue(PACKET_SIZE));
-        source.SetAttribute("MaxBytes", UintegerValue(flowSize));
+        source.SetAttribute("MaxBytes", UintegerValue(attackerFlowSize));
         source.SetAttribute("DelayThresh", UintegerValue(onTime));
         source.SetAttribute("DelayTime", TimeValue(MicroSeconds(offTime)));
 
         // Install apps
         ApplicationContainer sourceApp = source.Install(fromServers.Get(i));
-        sourceApp.Start(Seconds(START_TIME));
+        sourceApp.Start(start_time);
         sourceApp.Stop(Seconds(end_time));
 
         // Install packet sinks
         PacketSinkHelper sink("ns3::TcpSocketFactory",
                               InetSocketAddress(Ipv4Address::GetAny(), port));
         ApplicationContainer sinkApp = sink.Install(destServers.Get(destIndex));
-        sinkApp.Start(Seconds(START_TIME));
+        sinkApp.Start(start_time);
         sinkApp.Stop(Seconds(end_time));
       }
       else
       {
-        int attackerFlowSize = flowSize;
+        int attackerFlowSize = flowSize/2;
         // Attacker can send one or two flows
         if (hostileFlows > 1)
         {
@@ -240,20 +210,20 @@ void install_applications(
 
       // Install apps
       ApplicationContainer sourceApp = source.Install(fromServers.Get(i));
-      sourceApp.Start(Seconds(START_TIME));
+      sourceApp.Start(start_time);
       sourceApp.Stop(Seconds(end_time));
 
       // Install packet sinks
       PacketSinkHelper sink("ns3::TcpSocketFactory",
                             InetSocketAddress(Ipv4Address::GetAny(), port));
       ApplicationContainer sinkApp = sink.Install(destServers.Get(destIndex));
-      sinkApp.Start(Seconds(START_TIME));
+      sinkApp.Start(start_time);
       sinkApp.Stop(Seconds(end_time));
     }
 
     NS_LOG_INFO("\tFlow from server: "
                 << i << " to server: " << destIndex << " on port: " << port
-                << " [start time: " << START_TIME << "]");
+                << " [start time: " << start_time << "]");
   }
 }
 
@@ -350,6 +320,8 @@ int main(int argc, char *argv[])
 
   uint32_t flowSize = 2000000000; // 2 Gbps
 
+ // uint32_t hostileFlowSize = 1000000000;  // 1 Gbps
+
   uint32_t offTime = 0;
   uint32_t onTime = END_TIME * 1000000;
 
@@ -364,6 +336,8 @@ int main(int argc, char *argv[])
   // The simulation starting and ending time
   double startTime = START_TIME;
   double endTime = END_TIME;
+
+  int buffer_size = BUFFER_SIZE;
 
   CommandLine cmd;
   cmd.AddValue("ID", "Running ID", id);
@@ -405,6 +379,9 @@ int main(int argc, char *argv[])
   cmd.AddValue("attackerStart",
                "Start time for the attacker's second flow, if any",
                attackerStart);
+  cmd.AddValue("buffer",
+               "The queue size",
+               buffer_size);
   cmd.Parse(argc, argv);
 
   uint64_t LINK_ONE_CAPACITY = linkOneCapacity * LINK_CAPACITY_BASE;
@@ -433,7 +410,7 @@ int main(int argc, char *argv[])
     Config::SetDefault("ns3::RedQueueDisc::MeanPktSize",
                        UintegerValue(PACKET_SIZE));
     Config::SetDefault("ns3::RedQueueDisc::QueueLimit",
-                       UintegerValue(BUFFER_SIZE * PACKET_SIZE));
+                       UintegerValue(buffer_size * PACKET_SIZE));
     // Config::SetDefault ("ns3::QueueDisc::Quota", UintegerValue
     // (BUFFER_SIZE));
     Config::SetDefault("ns3::RedQueueDisc::Gentle", BooleanValue(false));
@@ -507,7 +484,7 @@ int main(int argc, char *argv[])
 
   // Setting switches
   p2p.SetChannelAttribute("Delay", TimeValue(LINK_LATENCY));
-  p2p.SetQueue("ns3::DropTailQueue", "MaxPackets", UintegerValue(BUFFER_SIZE));
+  p2p.SetQueue("ns3::DropTailQueue", "MaxPackets", UintegerValue(buffer_size));
 
   // Connecting to Spine 0
   p2p.SetDeviceAttribute("DataRate",
@@ -688,7 +665,7 @@ int main(int argc, char *argv[])
   Ptr<LinkMonitor> linkMonitor = Create<LinkMonitor>();
   Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaf0, linkMonitor, compromisedAddress);
   linkProbe->SetProbeName("Leaf 0");
-  linkProbe->SetCheckTime(MicroSeconds(10)); 
+  linkProbe->SetCheckTime(MicroSeconds(50)); 
   linkProbe->SetDataRateAll(DataRate(LINK_TWO_CAPACITY));
   linkMonitor->Start(Seconds(startTime));
   linkMonitor->Stop(Seconds(END_TIME));
@@ -704,7 +681,7 @@ int main(int argc, char *argv[])
   std::stringstream flowLoggingFilename;
 
   flowMonitorFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
-                      << linkTwoCapacity << "-" << SERVER_COUNT << "-"
+                      << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
                       << letFlowFlowletTimeout << "-" << flowSize << "-"
                       << (hostile == 0 ? "no_attacker" : "attacker") << "-"
@@ -713,7 +690,7 @@ int main(int argc, char *argv[])
                       << attackerProt << "-" << attackerApp << "-hflows-"
                       << hostileFlows << ".xml";
   linkMonitorFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
-                      << linkTwoCapacity << "-" << SERVER_COUNT << "-"
+                      << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
                       << letFlowFlowletTimeout << "-" << flowSize << "-"
                       << (hostile == 0 ? "no_attacker" : "attacker") << "-"
@@ -723,7 +700,7 @@ int main(int argc, char *argv[])
                       << hostileFlows << ".out";
 
   flowLoggingFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
-                      << linkTwoCapacity << "-" << SERVER_COUNT << "-"
+                      << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
                       << letFlowFlowletTimeout << "-" << flowSize << "-"
                       << (hostile == 0 ? "no_attacker" : "attacker") << "-"
@@ -775,34 +752,3 @@ int main(int argc, char *argv[])
 
   NS_LOG_INFO("Stop simulation");
 }
-
-// ./ waf-- run
-//         "letflow-convergence --servers=8 --runMode=LetFlow --transportProt=Tcp "
-//         "--randomSeed=1 --attackerProt=Tcp --attackerOffTime=250 "
-//         "--attackerOnTime=250 --hostileFlows=2 --attackerStart=250 "
-//         "--attackerApp=OnOff --attackerRate=1800 --letFlowFlowletTimeout=250 "
-//         "--EndTime=2.5 --flowSize=400000000 --hostile" &
-//         ./ waf-- run
-//             "letflow-convergence --servers=8 --runMode=LetFlow "
-//             "--transportProt=Tcp --randomSeed=1 --attackerProt=Tcp "
-//             "--attackerOffTime=250 --attackerOnTime=250 --hostileFlows=2 "
-//             "--attackerStart=250 --attackerApp=OnOff --attackerRate=1500 "
-//             "--letFlowFlowletTimeout=250 --EndTime=2.5 "
-//             "--flowSize=400000000 --hostile" &
-//         ./ waf-- run
-//             "letflow-convergence --servers=8 --runMode=LetFlow "
-//             "--transportProt=Tcp --randomSeed=1 --attackerProt=Tcp "
-//             "--attackerOffTime=250 --attackerOnTime=250 --hostileFlows=2 "
-//             "--attackerStart=0 --attackerApp=OnOff --attackerRate=1800 "
-//             "--letFlowFlowletTimeout=250 --EndTime=2.5 "
-//             "--flowSize=400000000 --hostile" &
-//         ./ waf-- run
-//             "letflow-convergence --servers=8 --runMode=LetFlow "
-//             "--transportProt=Tcp --randomSeed=1 --attackerProt=Tcp "
-//             "--attackerOffTime=250 --attackerOnTime=250 --hostileFlows=2 "
-//             "--attackerStart=0 --attackerApp=OnOff --attackerRate=1500 "
-//             "--letFlowFlowletTimeout=250 --EndTime=2.5 "
-//             "--flowSize=400000000 --hostile" &
-
-
-// ./ waf --run "letflow-convergence --servers=8 --runMode=LetFlow --transportProt=Tcp --randomSeed=1 --attackerProt=Tcp --attackerOffTime=250 --attackerOnTime=250 --hostileFlows=2 --attackerStart=0 --attackerApp=OnOff --attackerRate=1500 --letFlowFlowletTimeout=250 --EndTime=2.5 --flowSize=400000000 --hostile"

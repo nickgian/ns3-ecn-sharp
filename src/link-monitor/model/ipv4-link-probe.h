@@ -60,6 +60,9 @@ private:
   std::map<uint32_t, uint64_t> m_accumulatedTxBytes;
   std::map<uint32_t, uint64_t> m_accumulatedDequeueBytes;
 
+  // Per interface, per flow, byte/packets sent.
+  std::map<uint32_t, std::map<uint32_t, std::pair<uint32_t, uint32_t> > >  m_flowTx;
+
   std::map<uint32_t, uint32_t> m_NPacketsInQueue;
   std::map<uint32_t, uint32_t> m_NBytesInQueue;
 
