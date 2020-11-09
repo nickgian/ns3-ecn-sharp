@@ -91,8 +91,8 @@ void attackerInstallOnOff(
   /* Compute on time */
   double onTimed = (double(onTime) / 1000000);
 
-  printf(" %f ", offTimed);
-  printf(" %f ", onTimed);
+  printf("%f ", offTimed);
+  printf("%f", onTimed);
   std::stringstream onTimeStr;
   onTimeStr << "ns3::ConstantRandomVariable[Constant=" << onTimed << "]";
 
