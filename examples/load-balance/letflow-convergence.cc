@@ -1,5 +1,6 @@
 #include <assert.h>
 
+#include <algorithm>  // std::max
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -520,7 +521,7 @@ int main(int argc, char *argv[])
 
   // Setting servers under leaf 0
   p2p.SetDeviceAttribute("DataRate",
-                         DataRateValue(DataRate(LINK_ONE_CAPACITY)));
+                         DataRateValue(DataRate(std::max(LINK_ONE_CAPACITY, LINK_TWO_CAPACITY))));
   ipv4.SetBase("10.1.2.0", "255.255.255.0");
   for (int i = 0; i < SERVER_COUNT; i++)
   {
