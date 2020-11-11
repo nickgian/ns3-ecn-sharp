@@ -160,13 +160,18 @@ void OnOffApplication::StartApplication () // Called at time specified by Start
         {
           m_socket->Bind ();
         }
-      m_socket->Connect (m_peer);
-      m_socket->SetAllowBroadcast (false);
-      m_socket->ShutdownRecv ();
 
-      m_socket->SetConnectCallback (
-        MakeCallback (&OnOffApplication::ConnectionSucceeded, this),
-        MakeCallback (&OnOffApplication::ConnectionFailed, this));
+        // Change attributes before connecting
+        // m_socket->SetAttribute("SegmentSize", UintegerValue(700));
+        m_socket->SetAttribute("InitialCwnd", UintegerValue(4000));
+
+        m_socket->Connect(m_peer);
+        m_socket->SetAllowBroadcast(false);
+        m_socket->ShutdownRecv();
+
+        m_socket->SetConnectCallback(
+            MakeCallback(&OnOffApplication::ConnectionSucceeded, this),
+            MakeCallback(&OnOffApplication::ConnectionFailed, this));
     }
   m_cbrRateFailSafe = m_cbrRate;
 
