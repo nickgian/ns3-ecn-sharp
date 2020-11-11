@@ -1264,4 +1264,62 @@ UdpSocketImpl::Ipv6JoinGroup (Ipv6Address address, Socket::Ipv6MulticastFilterMo
     }
 }
 
+void
+UdpSocketImpl::AttachFlowId (Ptr<Packet> packet,
+        const Ipv4Address &saddr, const Ipv4Address &daddr, uint16_t sport, uint16_t dport)
+{
+  // const static uint8_t PROT_NUMBER = 6;
+  // XXX Per flow ECMP support
+  // Calculate the flow id and store it in the packet flow id packet tag
+  // NOTE Here we do not use the byte tag since we want the flow id tag to be applied to each packet
+  // after TCP fragmentation
+
+  // uint32_t flowId = 0;
+
+  // flowId ^= saddr.Get();
+  // flowId ^= daddr.Get();
+  // flowId ^= sport;
+  // flowId ^= (dport << 16);
+  // flowId += PROT_NUMBER;
+
+  uint32_t flowId = UdpSocketImpl::CalFlowId (saddr, daddr, sport, dport);
+
+  // XXX Flow Bender support (Brian: we don't need this part I think)
+  // if (m_flowBenderEnabled)
+  // {
+  //   uint32_t path = m_flowBender->GetV ();
+  //   flowId += path;
+
+  //   // Pause Support
+  //   if (m_isPauseEnabled && m_oldPath == 0)
+  //   {
+  //       m_oldPath = path;
+  //   }
+  //   if (m_isPauseEnabled
+  //           && !m_isPause
+  //           && m_oldPath != 0
+  //           && m_oldPath != path)
+  //   {
+  //       std::cout << "Turning on pause ..." << std::endl;
+  //       m_isPause = true;
+  //       m_oldPath = path;
+  //       Time pauseTime = m_flowBender->GetPauseTime ();
+  //       Simulator::Schedule (pauseTime, &TcpSocketBase::RecoverFromPause, this);
+  //   }
+  // }
+
+  packet->AddPacketTag(FlowIdTag(flowId));
+}
+
+uint32_t
+UdpSocketImpl::CalFlowId (const Ipv4Address &saddr, const Ipv4Address &daddr,
+          uint16_t sport, uint16_t dport)
+{
+  std::stringstream hash_string;
+  hash_string << daddr.Get ();
+  hash_string << dport;
+
+  return Hash32 (hash_string.str ());
+}
+
 } // namespace ns3
