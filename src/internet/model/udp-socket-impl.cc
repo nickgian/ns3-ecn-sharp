@@ -38,6 +38,7 @@
 #include "udp-l4-protocol.h"
 #include "ipv4-end-point.h"
 #include "ipv6-end-point.h"
+#include "ns3/flow-id-tag.h"
 #include <limits>
 
 namespace ns3 {
@@ -527,14 +528,6 @@ UdpSocketImpl::DoSendTo (Ptr<Packet> p, Ipv4Address dest, uint16_t port)
 
   Ptr<Ipv4> ipv4 = m_node->GetObject<Ipv4> ();
 
-  // Check m_endpoint and add flowID tag here
-  // Reference: tcp-socket-base.cc line 2967
-  if (m_endPoint)
-    {
-      UdpSocketImpl::AttachFlowId (p, m_endPoint->GetLocalAddress (),
-                         m_endPoint->GetPeerAddress (), header.GetSourcePort (), header.GetDestinationPort ());
-    }
-
   // Locally override the IP TTL for this socket
   // We cannot directly modify the TTL at this stage, so we set a Packet tag
   // The destination can be either multicast, unicast/anycast, or
@@ -643,6 +636,15 @@ UdpSocketImpl::DoSendTo (Ptr<Packet> p, Ipv4Address dest, uint16_t port)
       Socket::SocketErrno errno_;
       Ptr<Ipv4Route> route;
       Ptr<NetDevice> oif = m_boundnetdevice; //specify non-zero if bound to a specific device
+      
+      // Check m_endpoint and add flowID tag here
+      // Reference: tcp-socket-base.cc line 2967
+      if (m_endPoint)
+      {
+        UdpSocketImpl::AttachFlowId (p, m_endPoint->GetLocalAddress (),
+                         m_endPoint->GetPeerAddress (), m_endPoint->GetLocalPort (), m_endPoint->GetPeerPort ());
+      }
+      
       // TBD-- we could cache the route and just check its validity
       route = ipv4->GetRoutingProtocol ()->RouteOutput (p, header, oif, errno_); 
       if (route != 0)
