@@ -38,6 +38,7 @@
 #include "udp-l4-protocol.h"
 #include "ipv4-end-point.h"
 #include "ipv6-end-point.h"
+#include "ns3/flow-id-tag.h"
 #include <limits>
 
 namespace ns3 {
@@ -635,6 +636,15 @@ UdpSocketImpl::DoSendTo (Ptr<Packet> p, Ipv4Address dest, uint16_t port)
       Socket::SocketErrno errno_;
       Ptr<Ipv4Route> route;
       Ptr<NetDevice> oif = m_boundnetdevice; //specify non-zero if bound to a specific device
+      
+      // Check m_endpoint and add flowID tag here
+      // Reference: tcp-socket-base.cc line 2967
+      if (m_endPoint)
+      {
+        UdpSocketImpl::AttachFlowId (p, m_endPoint->GetLocalAddress (),
+                         m_endPoint->GetPeerAddress (), m_endPoint->GetLocalPort (), m_endPoint->GetPeerPort ());
+      }
+      
       // TBD-- we could cache the route and just check its validity
       route = ipv4->GetRoutingProtocol ()->RouteOutput (p, header, oif, errno_); 
       if (route != 0)
@@ -1262,6 +1272,64 @@ UdpSocketImpl::Ipv6JoinGroup (Ipv6Address address, Socket::Ipv6MulticastFilterMo
             }
         }
     }
+}
+
+void
+UdpSocketImpl::AttachFlowId (Ptr<Packet> packet,
+        const Ipv4Address &saddr, const Ipv4Address &daddr, uint16_t sport, uint16_t dport)
+{
+  // const static uint8_t PROT_NUMBER = 6;
+  // XXX Per flow ECMP support
+  // Calculate the flow id and store it in the packet flow id packet tag
+  // NOTE Here we do not use the byte tag since we want the flow id tag to be applied to each packet
+  // after TCP fragmentation
+
+  // uint32_t flowId = 0;
+
+  // flowId ^= saddr.Get();
+  // flowId ^= daddr.Get();
+  // flowId ^= sport;
+  // flowId ^= (dport << 16);
+  // flowId += PROT_NUMBER;
+
+  uint32_t flowId = UdpSocketImpl::CalFlowId (saddr, daddr, sport, dport);
+
+  // XXX Flow Bender support (Brian: we don't need this part I think)
+  // if (m_flowBenderEnabled)
+  // {
+  //   uint32_t path = m_flowBender->GetV ();
+  //   flowId += path;
+
+  //   // Pause Support
+  //   if (m_isPauseEnabled && m_oldPath == 0)
+  //   {
+  //       m_oldPath = path;
+  //   }
+  //   if (m_isPauseEnabled
+  //           && !m_isPause
+  //           && m_oldPath != 0
+  //           && m_oldPath != path)
+  //   {
+  //       std::cout << "Turning on pause ..." << std::endl;
+  //       m_isPause = true;
+  //       m_oldPath = path;
+  //       Time pauseTime = m_flowBender->GetPauseTime ();
+  //       Simulator::Schedule (pauseTime, &TcpSocketBase::RecoverFromPause, this);
+  //   }
+  // }
+
+  packet->AddPacketTag(FlowIdTag(flowId));
+}
+
+uint32_t
+UdpSocketImpl::CalFlowId (const Ipv4Address &saddr, const Ipv4Address &daddr,
+          uint16_t sport, uint16_t dport)
+{
+  std::stringstream hash_string;
+  hash_string << daddr.Get ();
+  hash_string << dport;
+
+  return Hash32 (hash_string.str ());
 }
 
 } // namespace ns3
