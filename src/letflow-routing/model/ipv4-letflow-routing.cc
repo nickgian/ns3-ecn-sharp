@@ -95,6 +95,33 @@ Ptr<Ipv4Route> Ipv4LetFlowRouting::RouteOutput(Ptr<Packet> packet,
   return 0;
 }
 
+
+void Ipv4LetFlowRouting::logFlowletGaps(uint32_t flowId, Time gapTime, bool hit) {
+  std::vector<std::pair<Time, std::map<uint32_t, std::pair<Time, bool> > > >
+      *flowGaps = &m_letFlowHistory.flowGapHistory;
+
+  std::pair<Time, bool> entry = std::pair<Time, bool> (gapTime, hit);
+  // Log flowlet gap history for attacker
+  if (flowGaps->size()) {
+    Time top = flowGaps->front().first;
+    if (top == Simulator::Now()) {
+      flowGaps->back().second.insert(std::pair<uint32_t, std::pair<Time, bool> >(flowId,  entry));
+    }
+    else {
+        std::map<uint32_t, std::pair<Time, bool> > flowToGap;
+        flowToGap.insert(std::pair<uint32_t, std::pair<Time, bool> >(flowId, entry));
+        flowGaps->insert(flowGaps->end(),
+                      std::make_pair(Simulator::Now(), flowToGap));
+    }
+  }
+  else {
+    std::map<uint32_t, std::pair<Time, bool> > flowToGap;
+    flowToGap.insert(std::pair<uint32_t, std::pair<Time, bool> >(flowId, entry));
+    flowGaps->insert(flowGaps->end(),
+                  std::make_pair(Simulator::Now(), flowToGap));
+  }
+}
+
 bool Ipv4LetFlowRouting::RouteInput(
     Ptr<const Packet> p, const Ipv4Header &header, Ptr<const NetDevice> idev,
     UnicastForwardCallback ucb, MulticastForwardCallback mcb,
@@ -126,11 +153,12 @@ bool Ipv4LetFlowRouting::RouteInput(
   // Packet arrival time
   Time now = Simulator::Now();
 
+  Time lastLog = m_letFlowHistory.lastLog;
   // Log flows if logging is enabled.
   if (m_letFlowHistory.enabled) {
     // If the time between the last log and now is more than the logging
     // interval
-    if (now - m_letFlowHistory.lastLog >= m_letFlowHistory.historyInterval) {
+    if (now - lastLog >= m_letFlowHistory.historyInterval) {
       std::vector<std::pair<Time, std::map<uint32_t, LetFlowFlowlet> > >
           *flowTables = &m_letFlowHistory.flowTableHistory;
       // Log current flowlet table
@@ -173,7 +201,8 @@ bool Ipv4LetFlowRouting::RouteInput(
       m_flowletTable.find(flowId);
   if (flowletItr != m_flowletTable.end()) {
     LetFlowFlowlet flowlet = flowletItr->second;
-    if (now - flowlet.activeTime <= m_flowletTimeout) {
+    Time gap = now - flowlet.activeTime;
+    if (gap <= m_flowletTimeout) {
       // Do not forget to update the flowlet active time
       flowlet.activeTime = now;
 
@@ -186,9 +215,29 @@ bool Ipv4LetFlowRouting::RouteInput(
 
       m_flowletTable[flowId] = flowlet;
 
+      // if (m_letFlowHistory.enabled && m_attackerFlowId.count(flowId)) {
+      //   // If the time between the last log and now is more than the logging
+      //   // interval
+      //   if (now - lastLog >= m_letFlowHistory.historyInterval) {
+      //     Ipv4LetFlowRouting::logFlowletGaps(flowId, gap, true);
+      //   }
+      // }
       return true;
     }
+    // else 
+    // {
+    //   // Logging not hit case.
+    //   if (m_letFlowHistory.enabled && m_attackerFlowId.count(flowId)) {
+    //     // If the time between the last log and now is more than the logging
+    //     // interval
+    //     if (now - lastLog >= m_letFlowHistory.historyInterval) {
+    //       Ipv4LetFlowRouting::logFlowletGaps(flowId, gap, false);
+    //     }
+    //   }
+    // } 
   }
+
+
 
   // Not hit. Random Select the Port
   int randPort = rand () % routeEntries.size();
@@ -232,7 +281,7 @@ void Ipv4LetFlowRouting::PrintRoutingTable(
 void Ipv4LetFlowRouting::EnableLetFlowHistory(Ipv4Address attacker) {
   m_letFlowHistory.enabled = true;
   m_letFlowHistory.lastLog = Time(0);
-  m_letFlowHistory.historyInterval = Time(MicroSeconds(50));
+  m_letFlowHistory.historyInterval = Time(MicroSeconds(1));
   m_attackerAddress = attacker;
 }
 

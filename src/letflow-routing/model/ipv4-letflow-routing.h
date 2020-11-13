@@ -28,6 +28,12 @@ struct LetFlowHistory {
   // A vector of how the flows are distributed over time.
   std::vector<std::pair<Time, std::map<uint32_t, LetFlowFlowlet> > >
       flowTableHistory;
+
+  // Log of when a new port is randomly selected by letflow
+  // Associates an (attacker) flowId with the duration of the gap detected
+  // and whether this was a hit or miss.
+  std::vector<std::pair<Time, std::map<uint32_t, std::pair<Time, bool> > > > flowGapHistory;
+
   Time lastLog;
   bool enabled;
   // How often to log details about flows
@@ -97,11 +103,15 @@ class Ipv4LetFlowRouting : public Ipv4RoutingProtocol {
   // Log
   LetFlowHistory m_letFlowHistory;
 
+
   // Attacker's address for logging purposes
   Ipv4Address m_attackerAddress;
 
   // Attacker flow id
   std::set<uint32_t> m_attackerFlowId;
+
+  void logFlowletGaps(uint32_t flowId, Time gapTime, bool hit);
+
 };
 
 }  // namespace ns3

@@ -46,6 +46,10 @@ public:
 
     // Per flow packet/byte transmission on every sample.
     std::map<uint32_t, std::pair<uint32_t, uint32_t> > txFlow;
+
+    // Link Utilization per flow
+    std::map<uint32_t, double> txFlowUtil;
+
   };
 
   static TypeId GetTypeId (void);

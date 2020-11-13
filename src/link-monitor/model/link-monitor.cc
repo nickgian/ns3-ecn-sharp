@@ -110,9 +110,9 @@ LinkMonitor::DefaultFormat (struct LinkProbe::LinkStats stat)
       << stat.packetsInQueueDisc << ", "
       << stat.bytesInQueueDisc;
 
-  for (std::map<uint32_t, std::pair<uint32_t, uint32_t> >::iterator it = stat.txFlow.begin(); 
-        it != stat.txFlow.end(); ++it) {
-          oss << ", " << it->first << ":" << it->second.first;
+  for (std::map<uint32_t, double >::iterator it = stat.txFlowUtil.begin(); 
+        it != stat.txFlowUtil.end(); ++it) {
+          oss << ", " << it->first << ":" << (it->second);
         }
   oss << "\n";
   return oss.str ();

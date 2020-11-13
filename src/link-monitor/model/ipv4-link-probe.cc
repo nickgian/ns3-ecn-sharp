@@ -308,8 +308,21 @@ Ipv4LinkProbe::CheckCurrentStatus ()
       newStats.packetsInQueueDisc = m_NPacketsInQueueDisc[interface];
       newStats.bytesInQueueDisc = m_NBytesInQueueDisc[interface];
       newStats.txFlow = m_flowTx[interface];
+
+      // Build per flow utilization map
+      std::map<uint32_t, double > flowTxUtilMap;
+      std::map<uint32_t, std::pair<uint32_t, uint32_t> >::iterator it;
+      for ( it = m_flowTx[interface].begin(); it != m_flowTx[interface].end(); it++ )
+      {
+        flowTxUtilMap[it->first] = GetLinkUtility(interface, it->second.first, m_checkTime);
+      }
+
+      newStats.txFlowUtil = flowTxUtilMap;
+
+      // Reset flow map
       std::map<uint32_t, std::pair<uint32_t, uint32_t> > flowTxMap;
       m_flowTx[interface] = flowTxMap;
+
       std::vector<struct LinkProbe::LinkStats> newVector;
       newVector.push_back (newStats);
       m_stats[interface] = newVector;
@@ -332,6 +345,18 @@ Ipv4LinkProbe::CheckCurrentStatus ()
       newStats.packetsInQueueDisc = m_NPacketsInQueueDisc[interface];
       newStats.bytesInQueueDisc = m_NPacketsInQueueDisc[interface];
       newStats.txFlow = m_flowTx[interface];
+
+
+      // Build per flow utilization map
+      std::map<uint32_t, double > flowTxUtilMap;
+      std::map<uint32_t, std::pair<uint32_t, uint32_t> >::iterator it;
+      for ( it = m_flowTx[interface].begin(); it != m_flowTx[interface].end(); it++ )
+      {
+        flowTxUtilMap[it->first] = GetLinkUtility(interface, it->second.first, m_checkTime);
+      }
+      newStats.txFlowUtil = flowTxUtilMap;
+
+      // Reset flow map
       std::map<uint32_t, std::pair<uint32_t, uint32_t> > flowTxMap;
       m_flowTx[interface] = flowTxMap;
       (itr->second).push_back (newStats);

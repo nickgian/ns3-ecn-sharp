@@ -124,7 +124,7 @@ void install_applications(
     double attacker_start, double end_time, uint32_t flowSize, int &flowCount,
     std::set<int> compromised, uint32_t offTime, uint32_t onTime,
     std::string attackerProt, std::string attackerApp, int rate,
-    int hostileFlows, int attackerPacketSize)
+    int hostileFlows, int attackerPacketSize, int hostileFlowSize)
 {
   NS_LOG_INFO("Install applications:");
   for (int i = 0; i < SERVER_COUNT; i++)
@@ -151,9 +151,8 @@ void install_applications(
             InetSocketAddress(toAddresses[destIndex].first, port));
 
         // onTime is treated as a number of packets in the TCP case.
-        int attackerFlowSize = flowSize / 2;
         source.SetAttribute("SendSize", UintegerValue(PACKET_SIZE));
-        source.SetAttribute("MaxBytes", UintegerValue(attackerFlowSize));
+        source.SetAttribute("MaxBytes", UintegerValue(hostileFlowSize));
         source.SetAttribute("DelayThresh", UintegerValue(onTime));
         source.SetAttribute("DelayTime", TimeValue(MicroSeconds(offTime)));
 
@@ -171,16 +170,15 @@ void install_applications(
       }
       else
       {
-        int attackerFlowSize = flowSize/2;
         // Attacker can send one or two flows
-        if (hostileFlows > 1)
-        {
-          // If attacker sends two flows then we half their flow size.
-          attackerFlowSize = attackerFlowSize / 2;
-        }
+        // if (hostileFlows > 1)
+        // {
+        //   // If attacker sends two flows then we half their flow size.
+        //   attackerFlowSize = attackerFlowSize / 2;
+        // }
 
         attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
-                             destIndex, START_TIME, end_time, attackerFlowSize,
+                             destIndex, START_TIME, end_time, hostileFlowSize,
                              offTime, onTime, attackerProt, rate,
                              attackerPacketSize);
 
@@ -193,7 +191,7 @@ void install_applications(
 
           attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
                                destIndex, START_TIME + attacker_start, end_time,
-                               attackerFlowSize, offTime, onTime, attackerProt,
+                               hostileFlowSize, offTime, onTime, attackerProt,
                                rate, attackerPacketSize);
           flowCount++;
         }
@@ -246,26 +244,43 @@ RunMode parseRunMode(std::string runModeStr)
   }
 }
 
-/* Output log file relating ports to flows.
-  Takes as input a filename, a vector of pairs of
-  time of sample, a pair of two maps:
+/* Output log file relating ports to flows. Takes as input a filename, a vector
+  of time and a map from flowId to Time (duration of flowlet gap that caused
+  rerouting), a vector of pairs of time of sample, a pair of two maps:
   - the first one maps attacker flow Ids to ports
-  - and the second one maps ports to number of flows on them.
-  and a set of ports that we want to log.
+  - and the second one maps ports to number of flows on them. and a set of ports
+    that we want to log.
 */
 void outputFlowLog(
     std::string filename,
+    std::vector<std::pair<Time, std::map<uint32_t, std::pair<Time, bool> > > > flowGapHistory,
     std::vector<std::pair<
         Time, std::pair<std::map<uint32_t, uint32_t>, std::map<uint32_t, int> > > >
         flowsPerPort,
     std::set<uint32_t> ports) {
   std::ofstream logfile;
   logfile.open(filename.c_str());
-
-  for (std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
+  std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
                                              std::map<uint32_t, int> > > >::
            const_iterator i = flowsPerPort.begin();
-       i != flowsPerPort.end(); ++i) {
+
+  // std::vector<std::pair<Time, std::map<uint32_t, std::pair<Time, bool> > > > ::
+  //          const_iterator fh = flowGapHistory.begin();
+
+  // while (fh != flowGapHistory.end()) {
+  //   logfile << fh->first.As(Time::MS);
+  //   for (std::map<uint32_t, std::pair<Time, bool> >::const_iterator fhj = (fh->second).begin();
+  //        fhj != (fh->second).end(); ++fhj)
+  //   {
+  //       // Using ':' for flow to flowlet gap info.
+  //       logfile << ", " << fhj->first << ":" << fhj->second.first.As(Time::US) << ":" << fhj->second.second;
+  //   }
+  //   logfile << "\n"; 
+  //   ++fh;
+  //  }
+
+ while (i != flowsPerPort.end())
+  {
     // Print time
     logfile << i->first.As(Time::MS);
     // Attacker's flows selected ports
@@ -287,7 +302,18 @@ void outputFlowLog(
         logfile << ", " << j->first << ":" << j->second;
       }
     }
+   // Print flowlet gap information
+  //  if (fh != flowGapHistory.end() && fh->first == i->first) {
+  //   for (std::map<uint32_t, Time>::const_iterator fhj = (fh->second).begin();
+  //        fhj != (fh->second).end(); ++fhj)
+  //   {
+  //       // Using '-' for flow to flowlet gap info.
+  //       logfile << ", " << fhj->first << "-" << fhj->second;
+  //   } 
+  //   ++fh;
+  //  }
     logfile << "\n";
+    ++i;
   }
   logfile.close();
 }
@@ -321,7 +347,7 @@ int main(int argc, char *argv[])
 
   uint32_t flowSize = 2000000000; // 2 Gbps
 
- // uint32_t hostileFlowSize = 1000000000;  // 1 Gbps
+  uint32_t hostileFlowSize = 1000000000;  // 1 Gbps
 
   uint32_t offTime = 0;
   uint32_t onTime = END_TIME * 1000000;
@@ -383,6 +409,7 @@ int main(int argc, char *argv[])
   cmd.AddValue("buffer",
                "The queue size",
                buffer_size);
+  cmd.AddValue("hostileFlowSize", "Size of hostile flows", hostileFlowSize);
   cmd.Parse(argc, argv);
 
   uint64_t LINK_ONE_CAPACITY = linkOneCapacity * LINK_CAPACITY_BASE;
@@ -652,7 +679,7 @@ int main(int argc, char *argv[])
   install_applications(servers0, servers1, SERVER_COUNT, serversAddr1,
                        attackerStart, endTime, flowSize, flowCount, compromised,
                        offTime, onTime, attackerProt, attackerApp, attackerRate,
-                       hostileFlows, attackerPacketSize);
+                       hostileFlows, attackerPacketSize, hostileFlowSize);
 
   NS_LOG_INFO("Total flow: " << flowCount);
 
@@ -666,7 +693,7 @@ int main(int argc, char *argv[])
   Ptr<LinkMonitor> linkMonitor = Create<LinkMonitor>();
   Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaf0, linkMonitor, compromisedAddress);
   linkProbe->SetProbeName("Leaf 0");
-  linkProbe->SetCheckTime(MicroSeconds(50)); 
+  linkProbe->SetCheckTime(MicroSeconds(100)); 
   linkProbe->SetDataRateAll(DataRate(LINK_TWO_CAPACITY));
   linkMonitor->Start(Seconds(startTime));
   linkMonitor->Stop(Seconds(END_TIME));
@@ -689,7 +716,7 @@ int main(int argc, char *argv[])
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
-                      << hostileFlows << ".xml";
+                      << hostileFlows << "-" << hostileFlowSize << ".xml";
   linkMonitorFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
                       << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
@@ -698,7 +725,7 @@ int main(int argc, char *argv[])
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
-                      << hostileFlows << ".out";
+                      << hostileFlows << "-" << hostileFlowSize << ".out";
 
   flowLoggingFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
                       << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
@@ -708,7 +735,7 @@ int main(int argc, char *argv[])
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
-                      << hostileFlows << ".flow";
+                      << hostileFlows << "-" << hostileFlowSize << ".flow";
 
   std::stringstream flowMonitorString;
   std::set<int>::iterator it = compromised.begin();
@@ -747,7 +774,7 @@ int main(int argc, char *argv[])
   std::set<uint32_t> ports;
   ports.insert(netdevice_leaf0_spine0.Get(0)->GetIfIndex());
   ports.insert(netdevice_leaf0_spine1.Get(0)->GetIfIndex());
-  outputFlowLog(flowLoggingFilename.str(), flows0, ports);
+  outputFlowLog(flowLoggingFilename.str(), letFlowLeaf0->GetLetFlowHistory().flowGapHistory,flows0, ports);
 
   Simulator::Destroy();
 
