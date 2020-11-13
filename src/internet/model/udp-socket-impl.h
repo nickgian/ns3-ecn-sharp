@@ -244,6 +244,13 @@ private:
   int32_t m_ipMulticastIf;  //!< Multicast Interface
   bool m_ipMulticastLoop;   //!< Allow multicast loop
   bool m_mtuDiscover;       //!< Allow MTU discovery
+
+  // flow ID related functions
+  void AttachFlowId (Ptr<Packet> packet, const Ipv4Address &saddr, const Ipv4Address &daddr,
+          uint16_t sport, uint16_t dport);
+
+  uint32_t CalFlowId (const Ipv4Address &saddr, const Ipv4Address &daddr,
+          uint16_t sport, uint16_t dport);
 };
 
 } // namespace ns3
