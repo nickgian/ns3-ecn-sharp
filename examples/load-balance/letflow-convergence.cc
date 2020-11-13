@@ -396,7 +396,7 @@ int main(int argc, char *argv[])
   cmd.AddValue("attackerRate", "Attacker rate of transmission", attackerRate);
   cmd.AddValue("hostileFlows", "Number of hostile flows", hostileFlows);
   cmd.AddValue("attackerProt",
-               "What protocol the attacker is using, currently: TCP or UDP.",
+               "What protocol the attacker is using, currently: Tcp or Udp.",
                attackerProt);
   cmd.AddValue("attackerApp",
                "What application is the attacker using (Bulk or OnOff)",

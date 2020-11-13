@@ -163,7 +163,7 @@ void OnOffApplication::StartApplication () // Called at time specified by Start
 
         // Change attributes before connecting
         // m_socket->SetAttribute("SegmentSize", UintegerValue(700));
-        m_socket->SetAttribute("InitialCwnd", UintegerValue(4000));
+        //m_socket->SetAttribute("InitialCwnd", UintegerValue(4000));
 
         m_socket->Connect(m_peer);
         m_socket->SetAllowBroadcast(false);
