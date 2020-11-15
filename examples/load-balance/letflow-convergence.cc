@@ -170,17 +170,21 @@ void install_applications(
       }
       else
       {
-        // Attacker can send one or two flows
-        // if (hostileFlows > 1)
-        // {
-        //   // If attacker sends two flows then we half their flow size.
-        //   attackerFlowSize = attackerFlowSize / 2;
-        // }
-
+        
+        //TODO: redo this whole thing, allow multiple attacker flows.
+        // Do consider attacker start time for the first flow, if it's just one flow.
+        if (hostileFlows == 1) {
+        attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
+                             destIndex, START_TIME + attacker_start, end_time, hostileFlowSize,
+                             offTime, onTime, attackerProt, rate,
+                             attackerPacketSize);
+        }
+        else { // Otherwise ignore it and just keep it for the second flow.
         attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
                              destIndex, START_TIME, end_time, hostileFlowSize,
                              offTime, onTime, attackerProt, rate,
                              attackerPacketSize);
+        }
 
         if (hostileFlows > 1)
         {
@@ -761,21 +765,23 @@ int main(int argc, char *argv[])
   linkMonitor->OutputToFile(linkMonitorFilename.str(),
                             &LinkMonitor::DefaultFormat);
 
-  // Flow logs
-  Ptr<Ipv4LetFlowRouting> letFlowLeaf0 =
-      letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>());
+  // Flow logs if in LetFlow mode
+  if (runMode == LetFlow) 
+  {
+    Ptr<Ipv4LetFlowRouting> letFlowLeaf0 =
+        letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>());
 
-  assert(letFlowLeaf0->GetLetFlowHistory().enabled);
-  std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
-                                        std::map<uint32_t, int> > > >
-      flows0 = letFlowLeaf0->ComputeNumberOfFlowsPerPort();
+    assert(letFlowLeaf0->GetLetFlowHistory().enabled);
+    std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
+                                          std::map<uint32_t, int> > > >
+        flows0 = letFlowLeaf0->ComputeNumberOfFlowsPerPort();
 
-  // Ports we are interested in
-  std::set<uint32_t> ports;
-  ports.insert(netdevice_leaf0_spine0.Get(0)->GetIfIndex());
-  ports.insert(netdevice_leaf0_spine1.Get(0)->GetIfIndex());
-  outputFlowLog(flowLoggingFilename.str(), letFlowLeaf0->GetLetFlowHistory().flowGapHistory,flows0, ports);
-
+    // Ports we are interested in
+    std::set<uint32_t> ports;
+    ports.insert(netdevice_leaf0_spine0.Get(0)->GetIfIndex());
+    ports.insert(netdevice_leaf0_spine1.Get(0)->GetIfIndex());
+    outputFlowLog(flowLoggingFilename.str(), letFlowLeaf0->GetLetFlowHistory().flowGapHistory,flows0, ports);
+  }
   Simulator::Destroy();
 
   NS_LOG_INFO("Stop simulation");

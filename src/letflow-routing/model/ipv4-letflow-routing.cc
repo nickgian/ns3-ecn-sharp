@@ -281,7 +281,7 @@ void Ipv4LetFlowRouting::PrintRoutingTable(
 void Ipv4LetFlowRouting::EnableLetFlowHistory(Ipv4Address attacker) {
   m_letFlowHistory.enabled = true;
   m_letFlowHistory.lastLog = Time(0);
-  m_letFlowHistory.historyInterval = Time(MicroSeconds(1));
+  m_letFlowHistory.historyInterval = Time(MicroSeconds(100));
   m_attackerAddress = attacker;
 }
 
