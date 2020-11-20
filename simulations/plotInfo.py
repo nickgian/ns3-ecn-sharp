@@ -139,7 +139,7 @@ def getPlotDetails(filename):
     attackerStr   = "No attacker" if attacker == "No attacker" else  app + " attacker with offTime = " + offTime + ", onTime = " + onTime + ", startTime: " + startTime + ", flows: " + attackerFlows + ", rate: " + rate + ", attacker flow= " + attackerFlowSize + ", " + protocol 
     
     title = "Flowlet gap = " + flowLetGap + ", Flow size = " + flowSize + ", " + attackerStr + ", buffer=" + buffer
-    return {'title':title, 'onTime':onTime, 'offTime':offTime, 'pathOneCap':pathOneCap, 'pathTwoCap':pathTwoCap, 'servers':servers, 'rate':rate, 'attackerFlows':attackerFlows, 'flowlet':flowLetGap}
+    return {'title':title, 'onTime':onTime, 'offTime':offTime, 'pathOneCap':pathOneCap, 'pathTwoCap':pathTwoCap, 'servers':servers, 'rate':rate, 'attackerFlows':attackerFlows, 'flowlet':flowLetGap, 'AttackerProt':protocol}
 
 def printFctStats(res):
     print ("Sender Avg FCT: %.4f" % res.get('sender_avg_fct'))
@@ -190,17 +190,34 @@ def bestAvgFct(log):
 def worstSenderAvgFct(log):
     return -log[3].get('sender_avg_fct')
 
-def show(df):
-    return df.style.apply(lambda x: ['background: #d65f5f' if int(x['offTime']) == 0 else '' for i in x], axis=1)
 
+def getBaseLine(df):
+    return df.loc[df['offTime'] == '0']
+
+def isMore(base, cur, thresh):
+    return cur >= base*(1+thresh)
+
+def show(df, caption):
+    base = getBaseLine(df)
+    return df.style.\
+        set_caption(caption).\
+        format({'AttackerSendPackets': "{:,}"}).\
+        apply(lambda x:[('background-color: #E6584F' if isMore(float(base.SenderAvgFct),float(v),0.25) else \
+                         ('background-color: #FAE4A1' if isMore(float(base.SenderAvgFct),float(v),0.15) else \
+                          ('background-color:#61B65F' if isMore(float(v), float(base.SenderAvgFct),0.0) else ''))) for v in x], subset=['SenderAvgFct']).\
+        apply(lambda x: ['background: #71A6D1' if int(x['offTime']) == 0 else '' for i in x], axis=1)
+
+
+#1261A0
+#E62C31
 def buildPandaRow(window, sim):
-    keys = ['onTime', 'offTime', 'servers', 'rate', 'attackerFlows', 'flowlet']
+    keys = ['offTime','onTime', 'servers', 'rate', 'attackerFlows', 'flowlet','AttackerProt']
     result = { k: sim[2][k] for k in keys }
     
     capacities = {'1':float(sim[2].get('pathOneCap')), '2':float(sim[2].get('pathTwoCap'))}
     balance = measureBalance(window, sim[0][0], {'1':sim[0][3], '2':sim[0][4]}, capacities)
-    result.update({'LoadBalance':balance.get('cab')})
-    result.update({'SenderAvgFct':sim[3].get('sender_avg_fct')})
+    result.update({'LoadBalance':float(balance.get('cab'))})
+    result.update({'SenderAvgFct':float(sim[3].get('sender_avg_fct'))})
     result.update({'SenderVarianceFct':sim[3].get('sender_variance_fct')})
     result.update({'AttackerSendPackets':int(sim[3].get('attacker_tx_packets'))})
     result.update({'AttackerWasteRatio':float(sim[3].get('attacker_lost_packets'))/float(sim[3].get('attacker_tx_packets'))})
