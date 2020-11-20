@@ -642,7 +642,7 @@ UdpSocketImpl::DoSendTo (Ptr<Packet> p, Ipv4Address dest, uint16_t port)
       if (m_endPoint)
       {
         UdpSocketImpl::AttachFlowId (p, m_endPoint->GetLocalAddress (),
-                         m_endPoint->GetPeerAddress (), m_endPoint->GetLocalPort (), m_endPoint->GetPeerPort ());
+                         dest, m_endPoint->GetLocalPort (), port);
       }
       
       // TBD-- we could cache the route and just check its validity
