@@ -344,6 +344,7 @@ int main(int argc, char *argv[])
 
   uint64_t linkOneCapacity = 5;
   uint64_t linkTwoCapacity = 20;
+  uint64_t linkThreeCapacity = 10;
 
   uint32_t letFlowFlowletTimeout = 500;
 
@@ -370,6 +371,11 @@ int main(int argc, char *argv[])
 
   int buffer_size = BUFFER_SIZE;
 
+  // Ratio of large flows
+  double largeFlowRatio = 0.5;
+  double smallFlowRatio = 1.0 - largeFlowRatio;
+
+
   CommandLine cmd;
   cmd.AddValue("ID", "Running ID", id);
   cmd.AddValue("StartTime", "Start time of the simulation", startTime);
@@ -385,6 +391,7 @@ int main(int argc, char *argv[])
 
   cmd.AddValue("linkOneCapacity", "Link one capacity in Gbps", linkOneCapacity);
   cmd.AddValue("linkTwoCapacity", "Link two capacity in Gbps", linkTwoCapacity);
+  cmd.AddValue("linkThreeCapacity", "Link two capacity in Gbps", linkThreeCapacity);
 
   cmd.AddValue("letFlowFlowletTimeout", "Flowlet timeout in LetFlow",
                letFlowFlowletTimeout);
@@ -414,10 +421,12 @@ int main(int argc, char *argv[])
                "The queue size",
                buffer_size);
   cmd.AddValue("hostileFlowSize", "Size of hostile flows", hostileFlowSize);
+  cmd.AddValue("largeFlowRatio", "Ratio of large flows in all generated flows", largeFlowRatio);
   cmd.Parse(argc, argv);
 
-  uint64_t LINK_ONE_CAPACITY = linkOneCapacity * LINK_CAPACITY_BASE;
-  uint64_t LINK_TWO_CAPACITY = linkTwoCapacity * LINK_CAPACITY_BASE;
+  uint64_t LINK_ONE_CAPACITY   = linkOneCapacity * LINK_CAPACITY_BASE;
+  uint64_t LINK_TWO_CAPACITY   = linkTwoCapacity * LINK_CAPACITY_BASE;
+  uint16_t LINK_THREE_CAPACITY = linkThreeCapacity * LINK_CAPACITY_BASE;
   Time LINK_LATENCY = MicroSeconds(linkLatency);
 
   RunMode runMode = parseRunMode(runModeStr);
@@ -431,6 +440,15 @@ int main(int argc, char *argv[])
     NS_LOG_ERROR("The network load should within 0.0 and 1.0");
     return 0;
   }
+
+  if (largeFlowRatio < 0.0 || largeFlowRatio >= 1.0)
+  {
+    NS_LOG_ERROR("Ratio of large flows should be between 0.0 and 1.0");
+    return 0;
+  }
+  smallFlowRatio = 1.0 - largeFlowRatio;
+  // this line is just to make sure ns3 doesnt throw any warnings, still working on the large+small flow mix.
+  smallFlowRatio++;
 
   if (transportProt.compare("DcTcp") == 0)
   {
@@ -471,6 +489,9 @@ int main(int argc, char *argv[])
   Ptr<Node> spine0 = CreateObject<Node>();
   Ptr<Node> spine1 = CreateObject<Node>();
 
+  // Additional spine for >2 paths
+  Ptr<Node> spine2 = CreateObject<Node>();
+
   // Some number of servers connecting to the leaves
   NodeContainer servers0;
   servers0.Create(SERVER_COUNT);
@@ -495,6 +516,8 @@ int main(int argc, char *argv[])
     internet.Install(leaf1);
     internet.Install(spine0);
     internet.Install(spine1);
+    // extra spine
+    internet.Install(spine2);
   }
   else if (runMode == ECMP)
   {
@@ -507,6 +530,8 @@ int main(int argc, char *argv[])
     internet.Install(leaf1);
     internet.Install(spine0);
     internet.Install(spine1);
+    // extra spine
+    internet.Install(spine2);
   }
 
   NS_LOG_INFO("Install channels and assign addresses");
@@ -534,16 +559,31 @@ int main(int argc, char *argv[])
   NodeContainer leaf1_spine1 = NodeContainer(leaf1, spine1);
   NetDeviceContainer netdevice_leaf1_spine1 = p2p.Install(leaf1_spine1);
 
+  // connect to spine 2
+  p2p.SetDeviceAttribute("DataRate",
+                         DataRateValue(DataRate(LINK_THREE_CAPACITY)));
+  NodeContainer leaf0_spine2 = NodeContainer(leaf0, spine2);
+  NetDeviceContainer netdevice_leaf0_spine2 = p2p.Install(leaf0_spine2);
+  NodeContainer leaf1_spine2 = NodeContainer(leaf1, spine1);
+  NetDeviceContainer netdevice_leaf1_spine2 = p2p.Install(leaf1_spine2);
+
+
   ipv4.SetBase("10.1.1.0", "255.255.255.0");
   Ipv4InterfaceContainer addr_leaf0_spine0 =
       ipv4.Assign(netdevice_leaf0_spine0);
   Ipv4InterfaceContainer addr_leaf0_spine1 =
       ipv4.Assign(netdevice_leaf0_spine1);
+  // spine 2
+  Ipv4InterfaceContainer addr_leaf0_spine2 =
+      ipv4.Assign(netdevice_leaf0_spine2);
 
   Ipv4InterfaceContainer addr_leaf1_spine0 =
       ipv4.Assign(netdevice_leaf1_spine0);
   Ipv4InterfaceContainer addr_leaf1_spine1 =
       ipv4.Assign(netdevice_leaf1_spine1);
+  //spine 2
+  Ipv4InterfaceContainer addr_leaf1_spine2 =
+      ipv4.Assign(netdevice_leaf1_spine2);
 
   std::vector<std::pair<Ipv4Address, uint32_t> > serversAddr0 =
       std::vector<std::pair<Ipv4Address, uint32_t> >(SERVER_COUNT);
