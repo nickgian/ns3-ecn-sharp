@@ -271,7 +271,7 @@ void sendHostileFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
                      int SERVER_COUNT, int LEAF_COUNT,
                      double END_TIME, struct cdf_table *cdfTable,
                      uint32_t flowSize, uint32_t offTime, uint32_t onTime,
-                     int rate) {
+                     int rate, std::string attackerProt) {
   flowCount++;
   uint16_t port = rand_range(PORT_START, PORT_END);
 
@@ -286,7 +286,11 @@ void sendHostileFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
   Ipv4InterfaceAddress destInterface = ipv4->GetAddress(1, 0);
   Ipv4Address destAddress = destInterface.GetLocal();
 
-  OnOffHelper source = OnOffHelper("ns3::TcpSocketFactory",
+
+  std::stringstream prot;
+  prot << "ns3::" << attackerProt << "SocketFactory";
+
+  OnOffHelper source = OnOffHelper(prot.str(),
                                    InetSocketAddress(destAddress, port));
 
   /* Compute off time */
@@ -317,7 +321,7 @@ void sendHostileFlow(int fromLeafId, NodeContainer servers, int fromServerIndex,
   sourceApp.Stop(Seconds(END_TIME));
 
   // Install packet sinks
-  PacketSinkHelper sink("ns3::TcpSocketFactory",
+  PacketSinkHelper sink(prot.str(),
                         InetSocketAddress(Ipv4Address::GetAny(), port));
   ApplicationContainer sinkApp = sink.Install(servers.Get(destServerIndex));
   sinkApp.Start(Seconds(startTime));
@@ -341,7 +345,7 @@ void install_applications(int fromLeafId, NodeContainer servers,
                           uint32_t applicationPauseTime,
                           std::set<int> compromised, int hostileFlowSize,
                           RunMode attackerMode, uint32_t offTime,
-                          uint32_t onTime, int rate, int hostileFlows) {
+                          uint32_t onTime, int rate, int hostileFlows, std::string attackerProt) {
   NS_LOG_INFO("Install applications:");
 
   for (int i = 0; i < SERVER_COUNT; i++) {
@@ -369,7 +373,7 @@ void install_applications(int fromLeafId, NodeContainer servers,
         sendHostileFlow(fromLeafId, servers, fromServerIndex, startTime,
                         flowCount, totalFlowSize, SERVER_COUNT, LEAF_COUNT,
                         END_TIME, cdfTable, flowSize, offTime,
-                        onTime, rate);
+                        onTime, rate, attackerProt);
         startTime += poission_gen_interval(requestRate);
       }
     } else {
@@ -540,6 +544,8 @@ int main(int argc, char *argv[]) {
   bool hostile = false;
 
   int hostileFlowSize = 0;
+
+  std::string attackerProt = "Udp";
 
   uint32_t offTime = 0;
   uint32_t onTime = END_TIME * 1000000;
@@ -722,6 +728,7 @@ int main(int argc, char *argv[]) {
                attackerModeStr);
   cmd.AddValue("attackerRate", "Attacker rate of transmission", attackerRate);
   cmd.AddValue("hostileFlows", "Number of hostile flows", hostileFlows);
+  cmd.AddValue("attackerProt", "Attacker protocol (default UDP)", attackerProt);
   cmd.Parse(argc, argv);
 
   uint64_t SPINE_LEAF_CAPACITY = spineLeafCapacity * LINK_CAPACITY_BASE;
@@ -1498,7 +1505,7 @@ int main(int argc, char *argv[]) {
                          END_TIME, FLOW_LAUNCH_END_TIME, applicationPauseThresh,
                          applicationPauseTime, compromised, hostileFlowSize,
                          attackerMode, offTime, onTime, attackerRate,
-                         hostileFlows);
+                         hostileFlows, attackerProt);
   }
 
   NS_LOG_INFO("Total flow: " << flowCount);
@@ -1684,10 +1691,10 @@ int main(int argc, char *argv[]) {
   }
 
   // Add attacker mode to filename.
-  flowMonitorFilename << attackerModeStr << "-attacker-" << offTime << "-"
+  flowMonitorFilename << attackerModeStr << "-attacker-" << attackerProt << "-" << offTime << "-"
                       << onTime << "-" << attackerRate << "-" << hostileFlows
                       << "-";
-  linkMonitorFilename << attackerModeStr << "-attacker-" << offTime << "-"
+  linkMonitorFilename << attackerModeStr << "-attacker-" << attackerProt << "-" <<  offTime << "-"
                       << onTime << "-" << attackerRate << "-" << hostileFlows
                       << "-";
 
