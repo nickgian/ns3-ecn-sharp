@@ -564,7 +564,7 @@ int main(int argc, char *argv[])
                          DataRateValue(DataRate(LINK_THREE_CAPACITY)));
   NodeContainer leaf0_spine2 = NodeContainer(leaf0, spine2);
   NetDeviceContainer netdevice_leaf0_spine2 = p2p.Install(leaf0_spine2);
-  NodeContainer leaf1_spine2 = NodeContainer(leaf1, spine1);
+  NodeContainer leaf1_spine2 = NodeContainer(leaf1, spine2);
   NetDeviceContainer netdevice_leaf1_spine2 = p2p.Install(leaf1_spine2);
 
 
@@ -675,6 +675,9 @@ int main(int argc, char *argv[])
     letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>())
         ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
                    netdevice_leaf0_spine1.Get(0)->GetIfIndex());
+    letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>())
+        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
+                   netdevice_leaf0_spine2.Get(0)->GetIfIndex());
 
     // Leaf 1 to spines
     letFlowRoutingHelper.GetLetFlowRouting(leaf1->GetObject<Ipv4>())
@@ -683,6 +686,9 @@ int main(int argc, char *argv[])
     letFlowRoutingHelper.GetLetFlowRouting(leaf1->GetObject<Ipv4>())
         ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
                    netdevice_leaf1_spine1.Get(1)->GetIfIndex());
+    letFlowRoutingHelper.GetLetFlowRouting(leaf1->GetObject<Ipv4>())
+        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
+                   netdevice_leaf1_spine2.Get(1)->GetIfIndex());
 
     // Spine 0 to leafs
     letFlowRoutingHelper.GetLetFlowRouting(spine0->GetObject<Ipv4>())
@@ -699,6 +705,14 @@ int main(int argc, char *argv[])
     letFlowRoutingHelper.GetLetFlowRouting(spine1->GetObject<Ipv4>())
         ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
                    netdevice_leaf0_spine1.Get(1)->GetIfIndex());
+
+    // Spine 2 to leafs
+    letFlowRoutingHelper.GetLetFlowRouting(spine1->GetObject<Ipv4>())
+        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
+                   netdevice_leaf1_spine2.Get(1)->GetIfIndex());
+    letFlowRoutingHelper.GetLetFlowRouting(spine1->GetObject<Ipv4>())
+        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
+                   netdevice_leaf0_spine2.Get(1)->GetIfIndex());
   }
   else
   {
@@ -817,9 +831,11 @@ int main(int argc, char *argv[])
         flows0 = letFlowLeaf0->ComputeNumberOfFlowsPerPort();
 
     // Ports we are interested in
+    //TODO: When extending to N ports we need to add all of them here.
     std::set<uint32_t> ports;
     ports.insert(netdevice_leaf0_spine0.Get(0)->GetIfIndex());
     ports.insert(netdevice_leaf0_spine1.Get(0)->GetIfIndex());
+    ports.insert(netdevice_leaf0_spine2.Get(0)->GetIfIndex());
     outputFlowLog(flowLoggingFilename.str(), letFlowLeaf0->GetLetFlowHistory().flowGapHistory,flows0, ports);
   }
   Simulator::Destroy();
