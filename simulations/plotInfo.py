@@ -16,8 +16,11 @@ def plotFlows(flows, xrange, plotDetails):
     fig, ax = plt.subplots(figsize=(22, 12))
     ax.set_xlim(xrange[0], xrange[1])
     ax.set_ylim(0, int(plotDetails.get('servers'))+1)
-    ax.plot(flows[0], flows[1], 'C1', label='Path1 (' + plotDetails.get('pathOneCap') + 'Gbps)')
-    ax.plot(flows[0], flows[2], 'C2', label='Path2 (' + plotDetails.get('pathTwoCap') + 'Gbps)')
+
+    for portId, flow in flows[1].items():
+        ax.plot(flows[0], flow, 'C' + str(portId), label='Path ' + str(portId))
+    # ax.plot(flows[0], flows[1], 'C1', label='Path1 (' + plotDetails.get('pathOneCap') + 'Gbps)')
+    # ax.plot(flows[0], flows[2], 'C2', label='Path2 (' + plotDetails.get('pathTwoCap') + 'Gbps)')
     ax.legend()
     ax.set_title(plotDetails.get('title'), color='C0')
     plt.ylabel('Number of flows')
@@ -28,8 +31,10 @@ def plotNormalizedFlows(flows, xrange, plotDetails):
     fig, ax = plt.subplots(figsize=(22, 12))
     ax.set_xlim(xrange[0], xrange[1])
     ax.set_ylim(0, int(plotDetails.get('servers'))+1)
-    ax.plot(flows[0], flows[3], 'C1', label='Path1 (' + plotDetails.get('pathOneCap') + 'Gbps)')
-    ax.plot(flows[0], flows[4], 'C2', label='Path2 (' + plotDetails.get('pathTwoCap') + 'Gbps)')
+    for portId, flow in flows[2].items():
+        ax.plot(flows[0], flow, 'C' + str(portId), label='Path ' + str(portId))
+    # ax.plot(flows[0], flows[3], 'C1', label='Path1 (' + plotDetails.get('pathOneCap') + 'Gbps)')
+    # ax.plot(flows[0], flows[4], 'C2', label='Path2 (' + plotDetails.get('pathTwoCap') + 'Gbps)')
     ax.legend()
     ax.set_title('Normalized Flows: ' + plotDetails.get('title'), color='C0')
     plt.ylabel('Numer of flows')
@@ -52,19 +57,19 @@ def plotAllFlows(flows, xrange, plotDetails):
     plotFlows(flows, xrange, plotDetails)
     plotNormalizedFlows(flows, xrange, plotDetails)
     
+# Plot a diagram showing which port each attacker flow has selected.
 def plotAttacker(flows, xrange, plotDetails):
-    if 0 < len(flows[5]):
-        fig, ax = plt.subplots(figsize=(22, 12))
-        ax.set_xlim(xrange[0], xrange[1])
-        ax.set_ylim(0, 3)
-        ax.plot(flows[0], flows[5][0], 'C4', label='Attacker 1')
-        if 1 < len(flows[5]):
-            ax.plot(flows[0], flows[5][1], 'C5', label='Attacker 2')
-        ax.legend()
-        ax.set_title(plotDetails.get('title'), color='C0')
-        plt.ylabel('Selected Port')
-        plt.xlabel('Time (ms)')
-        plt.show()
+    fig, ax = plt.subplots(figsize=(22, 12))
+    ax.set_xlim(xrange[0], xrange[1])
+    #TODO: dynamically set the number of ports
+    ax.set_ylim(0, 4)
+    for idx, (attackerFlow, selectedPort) in enumerate(flows[3].items()):
+        ax.plot(flows[0], selectedPort, 'C'+str(idx+1), label='Attacker ' + str(idx))
+    ax.legend()
+    ax.set_title(plotDetails.get('title'), color='C0')
+    plt.ylabel('Selected Port')
+    plt.xlabel('Time (ms)')
+    plt.show()
     
 # Plotting queues
 # pi = ports.get(i): info about port i
@@ -136,7 +141,7 @@ def getPlotDetails(filename):
     app           = components[17]
     attackerFlows = components[19]
     attackerFlowSize = components[20].split('.')[0]
-    attackerStr   = "No attacker" if attacker == "No attacker" else  app + " attacker with offTime = " + offTime + ", onTime = " + onTime + ", startTime: " + startTime + ", flows: " + attackerFlows + ", rate: " + rate + ", attacker flow= " + attackerFlowSize + ", " + protocol 
+    attackerStr   = "No attacker" if attacker == "No attacker" else  app + " attacker with offTime = " + offTime + ", onTime = " + onTime + ", startTime: " + startTime + ", flows: " + attackerFlows + ", rate: " + rate + ", attacker flow size= " + attackerFlowSize + ", " + protocol 
     
     title = "Flowlet gap = " + flowLetGap + ", Flow size = " + flowSize + ", " + attackerStr + ", buffer=" + buffer
     return {'title':title, 'onTime':onTime, 'offTime':offTime, 'pathOneCap':pathOneCap, 'pathTwoCap':pathTwoCap, 'servers':servers, 'rate':rate, 'attackerFlows':attackerFlows, 'flowlet':flowLetGap, 'AttackerProt':protocol}
@@ -153,8 +158,10 @@ def printFctStats(res):
     print ("Attacker Avg FCT: %.4f" % res.get('attacker_avg_fct', -1.0))
     
 def printFlowBalance(log, window):
-    capacities = {'1':float(log[2].get('pathOneCap')), '2':float(log[2].get('pathTwoCap'))}
-    balance = measureBalance(window, log[0][0], {'1':log[0][3], '2':log[0][4]}, capacities)
+    capacities = {1:float(log[2].get('pathOneCap')), 2:float(log[2].get('pathTwoCap')), 3:float(log[2].get('pathTwoCap'))}
+    time = log[0][0]
+    flowsPerPort = log[0][2] #normalized flows per port
+    balance = measureBalance(window, time, flowsPerPort, capacities)
     print("Average Flows Cab Distance: " + str(balance.get('cab')))
     print("Average Flows Chebysev Distance: " + str(balance.get('chebysev')))
     
@@ -208,14 +215,20 @@ def show(df, caption):
         apply(lambda x: ['background: #71A6D1' if int(x['offTime']) == 0 else '' for i in x], axis=1)
 
 
-#1261A0
-#E62C31
+# sim[0]: parseFlows
+    #sim[0][0]: time, sim[0][1]: portToFlows, sim[0][2]: normalizedPortsToFlows, sim[0][3]: attackerFlowsToPorts
+#sim[1]: queue and link utilization info
+#sim[2]: plot info
+#sim[3]: flow completion info
 def buildPandaRow(window, sim):
     keys = ['offTime','onTime', 'servers', 'rate', 'attackerFlows', 'flowlet','AttackerProt']
     result = { k: sim[2][k] for k in keys }
     
-    capacities = {'1':float(sim[2].get('pathOneCap')), '2':float(sim[2].get('pathTwoCap'))}
-    balance = measureBalance(window, sim[0][0], {'1':sim[0][3], '2':sim[0][4]}, capacities)
+    #TODO: Adapt capacities to be fast and slow path.
+    capacities = {1:float(log[2].get('pathOneCap')), 2:float(log[2].get('pathTwoCap')), 3:float(log[2].get('pathTwoCap'))}
+    time = sim[0][0]
+    flowsPerPort = sim[0][2] #normalized flows per port
+    balance = measureBalance(window, time, flowsPerPort, capacities)
     result.update({'LoadBalance':float(balance.get('cab'))})
     result.update({'SenderAvgFct':float(sim[3].get('sender_avg_fct'))})
     result.update({'SenderVarianceFct':sim[3].get('sender_variance_fct')})

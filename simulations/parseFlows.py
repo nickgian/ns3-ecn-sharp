@@ -9,55 +9,76 @@ def parseFlowCount(s):
     return (int(ls[0]), float(ls[1]))
 
 def parseAttackerPort(s):
-    return int(s.split("~",1)[1])
+    ls = s.split("~",1)
+    return (int(ls[0]), int(ls[1]))
 
 def tryParseAttackerPort(s, i):
     try:
         return parseAttackerPort(s[i])
     except IndexError:
-        return -1
+        return None
+    except ValueError:
+        return None
 
 def tryParseFlowCount(s, i):
     try:
         return parseFlowCount(s[i])
     except IndexError:
-        return (0, 0.0)
+        return None
     
 # Remove attacker flows from port->number_of_flows diagram
 def normalize(portIdx, portCnt, attackerPorts):
-    for i in attackerPorts:
+    for k, i in attackerPorts.items():
         if i == portIdx:
             portCnt = portCnt-1
     return portCnt
 
-#TODO: make this function work with more than two ports.
+# Used to accumulate the set of ports used in the simulation.
+seenPorts = set()
+
 def parseLogLine(s):
     s = s.split(",")
     s = list(map(lambda x: x.strip(), s))
     time = parseTime(s[0])
     ports = {}
-    attackerPorts = []
-    attackerPort1 = tryParseAttackerPort(s, 1) # attacker flow 1
-    attackerPort2 = tryParseAttackerPort(s, 2) # attacker flow 2
-    if attackerPort1 == -1:
-        s1 = tryParseFlowCount(s, 1)
-        s2 = tryParseFlowCount(s, 2)
-        ports.update({s1[0]:s1[1]})
-        ports.update({s2[0]:s2[1]})
-    else:
-        if attackerPort2 == -1:
-            s1 = tryParseFlowCount(s, 2)
-            s2 = tryParseFlowCount(s, 3)
-            ports.update({s1[0]:s1[1]})
-            ports.update({s2[0]:s2[1]})
-            attackerPorts.insert(0, attackerPort1)
-        else:
-            s1 = tryParseFlowCount(s, 3)
-            s2 = tryParseFlowCount(s, 4)
-            ports.update({s1[0]:s1[1]})
-            ports.update({s2[0]:s2[1]})
-            attackerPorts.insert(0, attackerPort2)
-            attackerPorts.insert(0, attackerPort1)
+    attackerPorts = {} # map from flowId to assigned port.
+    
+    # Parse which ports attacker flows are routed to.
+    idx = 1
+    parsed = tryParseAttackerPort(s,idx)
+    while parsed != None:
+        attackerPorts.update({parsed[0]:parsed[1]})
+        idx +=1
+        parsed = tryParseAttackerPort(s, idx)
+
+    parsed = tryParseFlowCount(s, idx)
+    while parsed != None:
+        seenPorts.add(parsed[0])
+        ports.update({parsed[0]:parsed[1]})
+        idx += 1
+        parsed = tryParseFlowCount(s, idx)
+
+    # attackerPort1 = tryParseAttackerPort(s, 1) # attacker flow 1
+    # attackerPort2 = tryParseAttackerPort(s, 2) # attacker flow 2
+    # if attackerPort1 == -1:
+    #     s1 = tryParseFlowCount(s, 1)
+    #     s2 = tryParseFlowCount(s, 2)
+    #     ports.update({s1[0]:s1[1]})
+    #     ports.update({s2[0]:s2[1]})
+    # else:
+    #     if attackerPort2 == -1:
+    #         s1 = tryParseFlowCount(s, 2)
+    #         s2 = tryParseFlowCount(s, 3)
+    #         ports.update({s1[0]:s1[1]})
+    #         ports.update({s2[0]:s2[1]})
+    #         attackerPorts.insert(0, attackerPort1)
+    #     else:
+    #         s1 = tryParseFlowCount(s, 3)
+    #         s2 = tryParseFlowCount(s, 4)
+    #         ports.update({s1[0]:s1[1]})
+    #         ports.update({s2[0]:s2[1]})
+    #         attackerPorts.insert(0, attackerPort2)
+    #         attackerPorts.insert(0, attackerPort1)
         
     normalizedPorts = {k: normalize(k, v, attackerPorts) for k, v in ports.items()}
     return (time, ports, normalizedPorts, attackerPorts)
@@ -80,6 +101,7 @@ def cabDistance(capacity, flows, totalCapacity, totalFlows):
 def measureBalance(window, time, flowsPerPort, capacities):
     minTime = window[0]
     maxTime = window[1]
+    # Find the indices corresponding to the given time
     i = bisect.bisect_left(time, minTime)
     j = bisect.bisect_left(time, maxTime)
     numberOfFlows = sum([f[i] for f in flowsPerPort.values()]) #A single sample should suffice to compute the sum of flows
@@ -96,22 +118,42 @@ def measureBalance(window, time, flowsPerPort, capacities):
     
 def parseLog(ls):
     timeAxis = []
-    plotOne = []
-    plotTwo = []
-    normalizedPlotOne = []
-    normalizedPlotTwo = []
+    plots = {} # Mapping ports to lists of number of flows.
+    normalizedPlots = {}
+    # plotOne = []
+    # plotTwo = []
+    # normalizedPlotOne = []
+    # normalizedPlotTwo = []
     attackerPorts = {}
-    for s in ls:
-        parsedLine = parseLogLine(s)
+
+    parsedLs = [parseLogLine(s) for s in ls]
+
+    # Initialize plots and normalizedPlots
+    for portId in seenPorts:
+        plots.update({portId:[]})
+        normalizedPlots.update({portId:[]})
+
+    for parsedLine in parsedLs:
         timeAxis.append(parsedLine[0])
-        plotOne.append(parsedLine[1].get(1,0.0))
-        plotTwo.append(parsedLine[1].get(2,0.0))
-        normalizedPlotOne.append(parsedLine[2].get(1,0.0))
-        normalizedPlotTwo.append(parsedLine[2].get(2,0.0))
-        for i in range(len(parsedLine[3])):
-            porti = attackerPorts.get(i, [])
-            porti.append(parsedLine[3][i])
-            attackerPorts.update({i: porti})
+        # For every port->flows parsed, add them to existing log.
+        for portId in seenPorts:
+            samplesForPortId = plots.get(portId, [])
+            samplesForPortId.append(parsedLine[1].get(portId, 0.0))
+            normalizedSamplesForPortId = normalizedPlots.get(portId, [])
+            normalizedSamplesForPortId.append(parsedLine[2].get(portId, 0.0))
+            # plots.update({portId: plots.get(portId, []).append(})
+            # normalizedPlots.update({portId: normalizedPlots.get(portId, []).append(parsedLine[2].get(portId, 0.0))})
+        
+        for flowId, p in parsedLine[3].items():
+            try:
+                current = attackerPorts.get(flowId)
+                current.append(p)
+            except:
+                attackerPorts.update({flowId:[p]})
+            # attackerPorts.update({flowId:})
+            # porti = attackerPorts.get(i, [])
+            # porti.append(parsedLine[3][i])
+            # attackerPorts.update({i: porti})
     
     #adding missing samples from late-started flows
     samples = len(timeAxis)
@@ -119,10 +161,12 @@ def parseLog(ls):
         if len(port) < samples:
             port = ([0.0] * (samples-len(port))) + port
             attackerPorts.update({flow: port})
-    return (timeAxis, plotOne, plotTwo, normalizedPlotOne, normalizedPlotTwo, attackerPorts)
+    return (timeAxis, plots, normalizedPlots, attackerPorts)
+
 
 def readLog(f):
     with open(f) as log_file:
+        seenPorts = set ()
         return parseLog(log_file.readlines())
     
 # Parsing Queue Information
