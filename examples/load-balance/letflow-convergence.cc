@@ -342,9 +342,9 @@ int main(int argc, char *argv[])
 
   int SERVER_COUNT = 8;
 
-  uint64_t linkOneCapacity = 5;
-  uint64_t linkTwoCapacity = 20;
-  uint64_t linkThreeCapacity = 10;
+  uint64_t linkOneCapacity = 20;
+  uint64_t linkTwoCapacity = 5;
+  uint64_t linkThreeCapacity = 5;
 
   uint32_t letFlowFlowletTimeout = 500;
 
@@ -373,8 +373,6 @@ int main(int argc, char *argv[])
 
   // Ratio of large flows
   double largeFlowRatio = 0.5;
-  double smallFlowRatio = 1.0 - largeFlowRatio;
-
 
   CommandLine cmd;
   cmd.AddValue("ID", "Running ID", id);
@@ -446,9 +444,6 @@ int main(int argc, char *argv[])
     NS_LOG_ERROR("Ratio of large flows should be between 0.0 and 1.0");
     return 0;
   }
-  smallFlowRatio = 1.0 - largeFlowRatio;
-  // this line is just to make sure ns3 doesnt throw any warnings, still working on the large+small flow mix.
-  smallFlowRatio++;
 
   if (transportProt.compare("DcTcp") == 0)
   {
@@ -707,10 +702,10 @@ int main(int argc, char *argv[])
                    netdevice_leaf0_spine1.Get(1)->GetIfIndex());
 
     // Spine 2 to leafs
-    letFlowRoutingHelper.GetLetFlowRouting(spine1->GetObject<Ipv4>())
+    letFlowRoutingHelper.GetLetFlowRouting(spine2->GetObject<Ipv4>())
         ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
                    netdevice_leaf1_spine2.Get(1)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(spine1->GetObject<Ipv4>())
+    letFlowRoutingHelper.GetLetFlowRouting(spine2->GetObject<Ipv4>())
         ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
                    netdevice_leaf0_spine2.Get(1)->GetIfIndex());
   }
