@@ -51,7 +51,7 @@ extern "C"
 
     using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("LetFlowConvergence");
+NS_LOG_COMPONENT_DEFINE("LetFlowConfigurable");
 
 enum RunMode
 {
@@ -124,7 +124,8 @@ void install_applications(
     double attacker_start, double end_time, uint32_t flowSize, int &flowCount,
     std::set<int> compromised, uint32_t offTime, uint32_t onTime,
     std::string attackerProt, std::string attackerApp, int rate,
-    int hostileFlows, int attackerPacketSize, int hostileFlowSize)
+    int hostileFlows, int attackerPacketSize, int hostileFlowSize,
+    int largeFlowSize, int smallFlowSize, int largeFlowThreshold)
 {
   NS_LOG_INFO("Install applications:");
   for (int i = 0; i < SERVER_COUNT; i++)
@@ -210,6 +211,11 @@ void install_applications(
 
       source.SetAttribute("SendSize", UintegerValue(PACKET_SIZE));
       source.SetAttribute("MaxBytes", UintegerValue(flowSize));
+      if (i < largeFlowThreshold) {
+          source.SetAttribute("MaxBytes", UintegerValue(largeFlowSize));
+      } else {
+          source.SetAttribute("MaxBytes", UintegerValue(smallFlowSize));
+      }
 
       // Install apps
       ApplicationContainer sourceApp = source.Install(fromServers.Get(i));
@@ -325,7 +331,7 @@ void outputFlowLog(
 int main(int argc, char *argv[])
 {
 #if 1
-  LogComponentEnable("LetFlowConvergence", LOG_LEVEL_INFO);
+  LogComponentEnable("LetFlowConfigurable", LOG_LEVEL_INFO);
 #endif
 
   // Command line parameters parsing
@@ -341,10 +347,11 @@ int main(int argc, char *argv[])
   uint32_t linkLatency = 10;
 
   int SERVER_COUNT = 8;
+  int PATH_COUNT = 2;
 
-  uint64_t linkOneCapacity = 20;
-  uint64_t linkTwoCapacity = 5;
-  uint64_t linkThreeCapacity = 5;
+  uint64_t linkOneCapacity = 5;
+  uint64_t linkTwoCapacity = 20;
+  uint64_t linkThreeCapacity = 10;
 
   uint32_t letFlowFlowletTimeout = 500;
 
@@ -371,8 +378,18 @@ int main(int argc, char *argv[])
 
   int buffer_size = BUFFER_SIZE;
 
-  // Ratio of large flows
+  // Flow configurables
+  uint32_t largeFlowSize = 2000000000; // 2 Gbps
+  uint32_t smallFlowSize = 50000000;   // 50 Mbps
   double largeFlowRatio = 0.5;
+  // double smallFlowRatio = 1.0 - largeFlowRatio;
+
+  // Path configurables
+  uint64_t fastPathCapacity = 20;
+  uint64_t slowPathCapacity = 5;
+  double fastPathRatio = 0.5;
+  // double slowPathRatio = 1 - fastPathRatio;
+
 
   CommandLine cmd;
   cmd.AddValue("ID", "Running ID", id);
@@ -382,6 +399,7 @@ int main(int argc, char *argv[])
                runModeStr);
   cmd.AddValue("randomSeed", "Random seed, 0 for random generated", randomSeed);
   cmd.AddValue("servers", "Server count", SERVER_COUNT);
+  cmd.AddValue("paths", "Number of paths in topology", PATH_COUNT);
   cmd.AddValue("transportProt", "Transport protocol to use: Tcp, DcTcp",
                transportProt);
   cmd.AddValue("linkLatency", "Link latency, should be in MicroSeconds",
@@ -418,13 +436,24 @@ int main(int argc, char *argv[])
   cmd.AddValue("buffer",
                "The queue size",
                buffer_size);
+  
   cmd.AddValue("hostileFlowSize", "Size of hostile flows", hostileFlowSize);
+  
+  // Brian: additional configurables for adding multiple paths and flows
   cmd.AddValue("largeFlowRatio", "Ratio of large flows in all generated flows", largeFlowRatio);
+  cmd.AddValue("fastPathRatio", "Ratio of fast paths in all paths", fastPathRatio);
+
+  cmd.AddValue("largeFlowSize", "Large flow size", largeFlowSize);
+  cmd.AddValue("smallFlowSize", "Small flow size", smallFlowSize);
+
+  cmd.AddValue("fastPathCapacity", "Fast path capacity", fastPathCapacity);
+  cmd.AddValue("slowPathCapacity", "Slow path capacity", slowPathCapacity);
+
   cmd.Parse(argc, argv);
 
-  uint64_t LINK_ONE_CAPACITY   = linkOneCapacity * LINK_CAPACITY_BASE;
-  uint64_t LINK_TWO_CAPACITY   = linkTwoCapacity * LINK_CAPACITY_BASE;
-  uint16_t LINK_THREE_CAPACITY = linkThreeCapacity * LINK_CAPACITY_BASE;
+
+  uint64_t FAST_PATH_CAPACITY = fastPathCapacity * LINK_CAPACITY_BASE;
+  uint64_t SLOW_PATH_CAPACITY = slowPathCapacity * LINK_CAPACITY_BASE;
   Time LINK_LATENCY = MicroSeconds(linkLatency);
 
   RunMode runMode = parseRunMode(runModeStr);
@@ -444,6 +473,16 @@ int main(int argc, char *argv[])
     NS_LOG_ERROR("Ratio of large flows should be between 0.0 and 1.0");
     return 0;
   }
+
+  if (fastPathRatio < 0.0 || fastPathRatio >= 1.0) 
+  {
+    NS_LOG_ERROR("Ratio of fast paths should be between 0.0 and 1.0");
+    return 0;
+  }
+
+  // index of the last fast path/large flow 
+  int fastPathThreshold  = static_cast<int> (PATH_COUNT * fastPathRatio);
+  int largeFlowThreshold = static_cast<int> (SERVER_COUNT * largeFlowRatio);
 
   if (transportProt.compare("DcTcp") == 0)
   {
@@ -487,6 +526,12 @@ int main(int argc, char *argv[])
   // Additional spine for >2 paths
   Ptr<Node> spine2 = CreateObject<Node>();
 
+  // configurable
+  NodeContainer spines;
+  spines.Create(PATH_COUNT);
+  NodeContainer leaves;
+  leaves.Create(2);
+
   // Some number of servers connecting to the leaves
   NodeContainer servers0;
   servers0.Create(SERVER_COUNT);
@@ -507,12 +552,9 @@ int main(int argc, char *argv[])
     internet.Install(servers1);
 
     internet.SetRoutingHelper(letFlowRoutingHelper);
-    internet.Install(leaf0);
-    internet.Install(leaf1);
-    internet.Install(spine0);
-    internet.Install(spine1);
-    // extra spine
-    internet.Install(spine2);
+    // configurable
+    internet.Install(spines);
+    internet.Install(leaves);
   }
   else if (runMode == ECMP)
   {
@@ -521,77 +563,34 @@ int main(int argc, char *argv[])
                        BooleanValue(true));
     internet.Install(servers0);
     internet.Install(servers1);
-    internet.Install(leaf0);
-    internet.Install(leaf1);
-    internet.Install(spine0);
-    internet.Install(spine1);
-    // extra spine
-    internet.Install(spine2);
+    // configurable
+    internet.Install(spines);
+    internet.Install(leaves);
   }
 
   NS_LOG_INFO("Install channels and assign addresses");
 
   PointToPointHelper p2p;
   Ipv4AddressHelper ipv4;
-
+  
   // Setting switches
   p2p.SetChannelAttribute("Delay", TimeValue(LINK_LATENCY));
   p2p.SetQueue("ns3::DropTailQueue", "MaxPackets", UintegerValue(buffer_size));
 
-  // Connecting to Spine 0
-  p2p.SetDeviceAttribute("DataRate",
-                         DataRateValue(DataRate(LINK_ONE_CAPACITY)));
-  NodeContainer leaf0_spine0 = NodeContainer(leaf0, spine0);
-  NetDeviceContainer netdevice_leaf0_spine0 = p2p.Install(leaf0_spine0);
-  NodeContainer leaf1_spine0 = NodeContainer(leaf1, spine0);
-  NetDeviceContainer netdevice_leaf1_spine0 = p2p.Install(leaf1_spine0);
-
-  // Does changing rate here work or do I need another p2p helper?
-  p2p.SetDeviceAttribute("DataRate",
-                         DataRateValue(DataRate(LINK_TWO_CAPACITY)));
-  NodeContainer leaf0_spine1 = NodeContainer(leaf0, spine1);
-  NetDeviceContainer netdevice_leaf0_spine1 = p2p.Install(leaf0_spine1);
-  NodeContainer leaf1_spine1 = NodeContainer(leaf1, spine1);
-  NetDeviceContainer netdevice_leaf1_spine1 = p2p.Install(leaf1_spine1);
-
-  // connect to spine 2
-  p2p.SetDeviceAttribute("DataRate",
-                         DataRateValue(DataRate(LINK_THREE_CAPACITY)));
-  NodeContainer leaf0_spine2 = NodeContainer(leaf0, spine2);
-  NetDeviceContainer netdevice_leaf0_spine2 = p2p.Install(leaf0_spine2);
-  NodeContainer leaf1_spine2 = NodeContainer(leaf1, spine2);
-  NetDeviceContainer netdevice_leaf1_spine2 = p2p.Install(leaf1_spine2);
-
-
-  ipv4.SetBase("10.1.1.0", "255.255.255.0");
-  Ipv4InterfaceContainer addr_leaf0_spine0 =
-      ipv4.Assign(netdevice_leaf0_spine0);
-  Ipv4InterfaceContainer addr_leaf0_spine1 =
-      ipv4.Assign(netdevice_leaf0_spine1);
-  // spine 2
-  Ipv4InterfaceContainer addr_leaf0_spine2 =
-      ipv4.Assign(netdevice_leaf0_spine2);
-
-  Ipv4InterfaceContainer addr_leaf1_spine0 =
-      ipv4.Assign(netdevice_leaf1_spine0);
-  Ipv4InterfaceContainer addr_leaf1_spine1 =
-      ipv4.Assign(netdevice_leaf1_spine1);
-  //spine 2
-  Ipv4InterfaceContainer addr_leaf1_spine2 =
-      ipv4.Assign(netdevice_leaf1_spine2);
-
+  
+  std::vector<Ipv4Address> leafNetworks(2);
   std::vector<std::pair<Ipv4Address, uint32_t> > serversAddr0 =
       std::vector<std::pair<Ipv4Address, uint32_t> >(SERVER_COUNT);
   std::vector<std::pair<Ipv4Address, uint32_t> > serversAddr1 =
       std::vector<std::pair<Ipv4Address, uint32_t> >(SERVER_COUNT);
-
+    
   // Setting servers under leaf 0
   p2p.SetDeviceAttribute("DataRate",
-                         DataRateValue(DataRate(std::max(LINK_ONE_CAPACITY, LINK_TWO_CAPACITY))));
+                         DataRateValue(DataRate(std::max(FAST_PATH_CAPACITY, SLOW_PATH_CAPACITY))));
   ipv4.SetBase("10.1.2.0", "255.255.255.0");
   for (int i = 0; i < SERVER_COUNT; i++)
   {
-    NodeContainer nodeContainer = NodeContainer(leaf0, servers0.Get(i));
+    NodeContainer nodeContainer = NodeContainer(leaves.Get(0), servers0.Get(i));
     NetDeviceContainer netDeviceContainer = p2p.Install(nodeContainer);
     Ipv4InterfaceContainer interfaceContainer = ipv4.Assign(netDeviceContainer);
     serversAddr0[i] = std::make_pair(interfaceContainer.GetAddress(1),
@@ -602,12 +601,55 @@ int main(int argc, char *argv[])
   ipv4.SetBase("10.1.3.0", "255.255.255.0");
   for (int i = 0; i < SERVER_COUNT; i++)
   {
-    NodeContainer nodeContainer = NodeContainer(leaf1, servers1.Get(i));
+    NodeContainer nodeContainer = NodeContainer(leaves.Get(1), servers1.Get(i));
     NetDeviceContainer netDeviceContainer = p2p.Install(nodeContainer);
     Ipv4InterfaceContainer interfaceContainer = ipv4.Assign(netDeviceContainer);
     serversAddr1[i] = std::make_pair(interfaceContainer.GetAddress(1),
                                      netDeviceContainer.Get(0)->GetIfIndex());
   }
+
+
+  leafNetworks[0] = Ipv4Address("10.1.2.0");
+  leafNetworks[1] = Ipv4Address("10.1.3.0");
+  std::vector<NetDeviceContainer> interestedNetDevices(PATH_COUNT);
+  // setting toplogy (leaf, spine)
+  ipv4.SetBase("10.1.1.0", "255.255.255.0");
+  for (int i = 0; i < 2; ++i) {
+      for (int j = 0; j < PATH_COUNT; ++j) {
+          // Set datarate (slow/fast) according to threshold
+          if (j < fastPathThreshold) {
+              p2p.SetDeviceAttribute("DataRate",
+                         DataRateValue(DataRate(FAST_PATH_CAPACITY)));
+          } else {
+              p2p.SetDeviceAttribute("DataRate",
+                         DataRateValue(DataRate(SLOW_PATH_CAPACITY)));
+          }
+          NodeContainer nodeContainer = NodeContainer(leaves.Get(i), spines.Get(j));
+          NetDeviceContainer netDeviceContainer = p2p.Install(nodeContainer);
+          Ipv4InterfaceContainer ipv4InterfaceContainer =ipv4.Assign(netDeviceContainer);
+          // need to clean this dirty code a bit  
+          if (i == 0) interestedNetDevices[j] = netDeviceContainer;
+
+          
+          if (runMode == LetFlow) {
+              // For each leaf, add routing entry to the other leaf
+              // i.e. leaf --> spine --> leaf
+              for (int k = 0; k < 2; ++k) {
+                  if (k != i) {
+                      letFlowRoutingHelper.GetLetFlowRouting(leaves.Get(i)->GetObject<Ipv4>())
+                       ->AddRoute(leafNetworks[k], Ipv4Mask("255.255.255.0"),
+                                  netDeviceContainer.Get(0)->GetIfIndex());
+                  }
+              }
+              // for each spine, add route to leaf
+              // i.e. spine --> leaf
+              letFlowRoutingHelper.GetLetFlowRouting(spines.Get(j)->GetObject<Ipv4>())
+                ->AddRoute(leafNetworks[i], Ipv4Mask("255.255.255.0"),
+                           netDeviceContainer.Get(1)->GetIfIndex());
+          }
+      }
+  }
+
 
   /* Nick: Create set of compromised servers */
 
@@ -639,7 +681,7 @@ int main(int argc, char *argv[])
           ->AddNetworkRouteTo(Ipv4Address("0.0.0.0"), Ipv4Mask("0.0.0.0"), 1);
 
       Ptr<Ipv4LetFlowRouting> letFlowLeaf0 =
-          letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>());
+          letFlowRoutingHelper.GetLetFlowRouting(leaves.Get(0)->GetObject<Ipv4>());
 
       // Enabling logging for leaf0
       letFlowLeaf0->EnableLetFlowHistory(compromisedAddress);
@@ -655,59 +697,13 @@ int main(int argc, char *argv[])
           ->AddNetworkRouteTo(Ipv4Address("0.0.0.0"), Ipv4Mask("0.0.0.0"), 1);
 
       Ptr<Ipv4LetFlowRouting> letFlowLeaf1 =
-          letFlowRoutingHelper.GetLetFlowRouting(leaf1->GetObject<Ipv4>());
+          letFlowRoutingHelper.GetLetFlowRouting(leaves.Get(1)->GetObject<Ipv4>());
 
       letFlowLeaf1->AddRoute(serversAddr1[serverIndex].first,
                              Ipv4Mask("255.255.255.255"),
                              serversAddr1[serverIndex].second);
       letFlowLeaf1->SetFlowletTimeout(MicroSeconds(letFlowFlowletTimeout));
     }
-
-    // Leaf 0 to spines
-    letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf0_spine0.Get(0)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf0_spine1.Get(0)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf0_spine2.Get(0)->GetIfIndex());
-
-    // Leaf 1 to spines
-    letFlowRoutingHelper.GetLetFlowRouting(leaf1->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf1_spine0.Get(1)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(leaf1->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf1_spine1.Get(1)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(leaf1->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf1_spine2.Get(1)->GetIfIndex());
-
-    // Spine 0 to leafs
-    letFlowRoutingHelper.GetLetFlowRouting(spine0->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf1_spine0.Get(1)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(spine0->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf0_spine0.Get(1)->GetIfIndex());
-
-    // Spine 1 to leafs
-    letFlowRoutingHelper.GetLetFlowRouting(spine1->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf1_spine1.Get(1)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(spine1->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf0_spine1.Get(1)->GetIfIndex());
-
-    // Spine 2 to leafs
-    letFlowRoutingHelper.GetLetFlowRouting(spine2->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.3.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf1_spine2.Get(1)->GetIfIndex());
-    letFlowRoutingHelper.GetLetFlowRouting(spine2->GetObject<Ipv4>())
-        ->AddRoute(Ipv4Address("10.1.2.0"), Ipv4Mask("255.255.255.0"),
-                   netdevice_leaf0_spine2.Get(1)->GetIfIndex());
   }
   else
   {
@@ -732,7 +728,8 @@ int main(int argc, char *argv[])
   install_applications(servers0, servers1, SERVER_COUNT, serversAddr1,
                        attackerStart, endTime, flowSize, flowCount, compromised,
                        offTime, onTime, attackerProt, attackerApp, attackerRate,
-                       hostileFlows, attackerPacketSize, hostileFlowSize);
+                       hostileFlows, attackerPacketSize, hostileFlowSize,
+                       largeFlowSize, smallFlowSize, largeFlowThreshold);
 
   NS_LOG_INFO("Total flow: " << flowCount);
 
@@ -747,7 +744,7 @@ int main(int argc, char *argv[])
   Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaf0, linkMonitor, compromisedAddress);
   linkProbe->SetProbeName("Leaf 0");
   linkProbe->SetCheckTime(MicroSeconds(100)); 
-  linkProbe->SetDataRateAll(DataRate(LINK_TWO_CAPACITY));
+  linkProbe->SetDataRateAll(DataRate(FAST_PATH_CAPACITY));
   linkMonitor->Start(Seconds(startTime));
   linkMonitor->Stop(Seconds(END_TIME));
 
@@ -828,9 +825,9 @@ int main(int argc, char *argv[])
     // Ports we are interested in
     //TODO: When extending to N ports we need to add all of them here.
     std::set<uint32_t> ports;
-    ports.insert(netdevice_leaf0_spine0.Get(0)->GetIfIndex());
-    ports.insert(netdevice_leaf0_spine1.Get(0)->GetIfIndex());
-    ports.insert(netdevice_leaf0_spine2.Get(0)->GetIfIndex());
+    for (int i = 0; i < PATH_COUNT; ++i) {
+        ports.insert(interestedNetDevices[i].Get(0)->GetIfIndex());
+    }
     outputFlowLog(flowLoggingFilename.str(), letFlowLeaf0->GetLetFlowHistory().flowGapHistory,flows0, ports);
   }
   Simulator::Destroy();
