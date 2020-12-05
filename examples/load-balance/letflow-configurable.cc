@@ -121,11 +121,11 @@ void attackerInstallOnOff(
 void install_applications(
     NodeContainer fromServers, NodeContainer destServers, int SERVER_COUNT,
     std::vector<std::pair<Ipv4Address, uint32_t> > toAddresses,
-    double attacker_start, double end_time, uint32_t flowSize, int &flowCount,
+    double attacker_start, double end_time, int &flowCount,
     std::set<int> compromised, uint32_t offTime, uint32_t onTime,
     std::string attackerProt, std::string attackerApp, int rate,
     int hostileFlows, int attackerPacketSize, int hostileFlowSize,
-    int largeFlowSize, int smallFlowSize, int largeFlowThreshold)
+    int largeFlowSize, int smallFlowSize, int smallFlows, uint32_t smallFlowStartTime)
 {
   NS_LOG_INFO("Install applications:");
   for (int i = 0; i < SERVER_COUNT; i++)
@@ -136,10 +136,10 @@ void install_applications(
     int destIndex = rand_range(0, SERVER_COUNT - 1);
 
     // Slightly change the start time
- 
-     Time start_time = MicroSeconds(START_TIME);
-     
-        // Time start_time = MicroSeconds(rand_range(0, 50) + START_TIME);
+
+    Time start_time = MicroSeconds(START_TIME);
+
+    // Time start_time = MicroSeconds(rand_range(0, 50) + START_TIME);
 
     // Each server sends a flow
 
@@ -171,20 +171,22 @@ void install_applications(
       }
       else
       {
-        
+
         //TODO: redo this whole thing, allow multiple attacker flows.
         // Do consider attacker start time for the first flow, if it's just one flow.
-        if (hostileFlows == 1) {
-        attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
-                             destIndex, START_TIME + attacker_start, end_time, hostileFlowSize,
-                             offTime, onTime, attackerProt, rate,
-                             attackerPacketSize);
+        if (hostileFlows == 1)
+        {
+          attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
+                               destIndex, START_TIME + attacker_start, end_time, hostileFlowSize,
+                               offTime, onTime, attackerProt, rate,
+                               attackerPacketSize);
         }
-        else { // Otherwise ignore it and just keep it for the second flow.
-        attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
-                             destIndex, START_TIME, end_time, hostileFlowSize,
-                             offTime, onTime, attackerProt, rate,
-                             attackerPacketSize);
+        else
+        { // Otherwise ignore it and just keep it for the second flow.
+          attackerInstallOnOff(fromServers, destServers, toAddresses, i, port,
+                               destIndex, START_TIME, end_time, hostileFlowSize,
+                               offTime, onTime, attackerProt, rate,
+                               attackerPacketSize);
         }
 
         if (hostileFlows > 1)
@@ -205,34 +207,44 @@ void install_applications(
     else
     {
       // If it's  not an attacker
-      BulkSendHelper source(
-          "ns3::TcpSocketFactory",
-          InetSocketAddress(toAddresses[destIndex].first, port));
 
-      source.SetAttribute("SendSize", UintegerValue(PACKET_SIZE));
-      source.SetAttribute("MaxBytes", UintegerValue(flowSize));
-      if (i < largeFlowThreshold) {
+      bool isLargeFlow = true;
+      Time flow_start_time = start_time;
+      for (int flowIdx = 0; flowIdx < smallFlows + 1;)
+      {
+        BulkSendHelper source(
+            "ns3::TcpSocketFactory",
+            InetSocketAddress(toAddresses[destIndex].first, port));
+
+        source.SetAttribute("SendSize", UintegerValue(PACKET_SIZE));
+        if (isLargeFlow)
+        {
           source.SetAttribute("MaxBytes", UintegerValue(largeFlowSize));
-      } else {
+          isLargeFlow = false;
+        }
+        else
+        {
           source.SetAttribute("MaxBytes", UintegerValue(smallFlowSize));
+          flow_start_time = MicroSeconds(rand_range(0, 5000) + start_time + smallFlowStartTime);
+        }
+
+        // Install apps
+        ApplicationContainer sourceApp = source.Install(fromServers.Get(i));
+        sourceApp.Start(flow_start_time);
+        sourceApp.Stop(Seconds(end_time));
+
+        // Install packet sinks
+        PacketSinkHelper sink("ns3::TcpSocketFactory",
+                              InetSocketAddress(Ipv4Address::GetAny(), port));
+        ApplicationContainer sinkApp = sink.Install(destServers.Get(destIndex));
+        sinkApp.Start(flow_start_time);
+        sinkApp.Stop(Seconds(end_time));
+
+        NS_LOG_INFO("\tFlow from server: "
+                    << i << " to server: " << destIndex << " on port: " << port
+                    << " [start time: " << start_time << "]");
       }
-
-      // Install apps
-      ApplicationContainer sourceApp = source.Install(fromServers.Get(i));
-      sourceApp.Start(start_time);
-      sourceApp.Stop(Seconds(end_time));
-
-      // Install packet sinks
-      PacketSinkHelper sink("ns3::TcpSocketFactory",
-                            InetSocketAddress(Ipv4Address::GetAny(), port));
-      ApplicationContainer sinkApp = sink.Install(destServers.Get(destIndex));
-      sinkApp.Start(start_time);
-      sinkApp.Stop(Seconds(end_time));
     }
-
-    NS_LOG_INFO("\tFlow from server: "
-                << i << " to server: " << destIndex << " on port: " << port
-                << " [start time: " << start_time << "]");
   }
 }
 
@@ -349,15 +361,9 @@ int main(int argc, char *argv[])
   int SERVER_COUNT = 8;
   int PATH_COUNT = 2;
 
-  uint64_t linkOneCapacity = 5;
-  uint64_t linkTwoCapacity = 20;
-  uint64_t linkThreeCapacity = 10;
-
   uint32_t letFlowFlowletTimeout = 500;
 
   bool hostile = false;
-
-  uint32_t flowSize = 2000000000; // 2 Gbps
 
   uint32_t hostileFlowSize = 1000000000;  // 1 Gbps
 
@@ -381,7 +387,8 @@ int main(int argc, char *argv[])
   // Flow configurables
   uint32_t largeFlowSize = 2000000000; // 2 Gbps
   uint32_t smallFlowSize = 50000000;   // 50 Mbps
-  double largeFlowRatio = 0.5;
+  uint32_t smallFlows = 0;
+  double smallFlowStartTime = 10000;
   // double smallFlowRatio = 1.0 - largeFlowRatio;
 
   // Path configurables
@@ -390,6 +397,7 @@ int main(int argc, char *argv[])
   double fastPathRatio = 0.5;
   // double slowPathRatio = 1 - fastPathRatio;
 
+  bool monitorLinks = true;
 
   CommandLine cmd;
   cmd.AddValue("ID", "Running ID", id);
@@ -405,15 +413,10 @@ int main(int argc, char *argv[])
   cmd.AddValue("linkLatency", "Link latency, should be in MicroSeconds",
                linkLatency);
 
-  cmd.AddValue("linkOneCapacity", "Link one capacity in Gbps", linkOneCapacity);
-  cmd.AddValue("linkTwoCapacity", "Link two capacity in Gbps", linkTwoCapacity);
-  cmd.AddValue("linkThreeCapacity", "Link two capacity in Gbps", linkThreeCapacity);
-
   cmd.AddValue("letFlowFlowletTimeout", "Flowlet timeout in LetFlow",
                letFlowFlowletTimeout);
 
   cmd.AddValue("hostile", "Whether there are compromised hosts", hostile);
-  cmd.AddValue("flowSize", "The size of the flow hosts generate", flowSize);
   cmd.AddValue("attackerOnTime",
                "How long the attacker should send packets until he pauses in "
                "Microseconds (OnOff), or number of packets until pause (Bulk)",
@@ -440,7 +443,7 @@ int main(int argc, char *argv[])
   cmd.AddValue("hostileFlowSize", "Size of hostile flows", hostileFlowSize);
   
   // Brian: additional configurables for adding multiple paths and flows
-  cmd.AddValue("largeFlowRatio", "Ratio of large flows in all generated flows", largeFlowRatio);
+  cmd.AddValue("smallFlows", "Number of small flows", smallFlows);
   cmd.AddValue("fastPathRatio", "Ratio of fast paths in all paths", fastPathRatio);
 
   cmd.AddValue("largeFlowSize", "Large flow size", largeFlowSize);
@@ -448,6 +451,9 @@ int main(int argc, char *argv[])
 
   cmd.AddValue("fastPathCapacity", "Fast path capacity", fastPathCapacity);
   cmd.AddValue("slowPathCapacity", "Slow path capacity", slowPathCapacity);
+
+  cmd.AddValue("smallFlowStart", "Start time for small flows", smallFlowStartTime);
+  cmd.AddValue("monitorLinks", "Whether to monitor link/queue utilization", monitorLinks );
 
   cmd.Parse(argc, argv);
 
@@ -462,19 +468,13 @@ int main(int argc, char *argv[])
   // set up different attacker modes. RunMode attackerMode =
   // parseRunMode(attackerModeStr);
 
-  if (load < 0.0 || load >= 1.0)
+  if (load < 0.0 || load > 1.0)
   {
     NS_LOG_ERROR("The network load should within 0.0 and 1.0");
     return 0;
   }
 
-  if (largeFlowRatio < 0.0 || largeFlowRatio >= 1.0)
-  {
-    NS_LOG_ERROR("Ratio of large flows should be between 0.0 and 1.0");
-    return 0;
-  }
-
-  if (fastPathRatio < 0.0 || fastPathRatio >= 1.0) 
+  if (fastPathRatio < 0.0 || fastPathRatio > 1.0) 
   {
     NS_LOG_ERROR("Ratio of fast paths should be between 0.0 and 1.0");
     return 0;
@@ -482,7 +482,7 @@ int main(int argc, char *argv[])
 
   // index of the last fast path/large flow 
   int fastPathThreshold  = static_cast<int> (PATH_COUNT * fastPathRatio);
-  int largeFlowThreshold = static_cast<int> (SERVER_COUNT * largeFlowRatio);
+  //int largeFlowThreshold = static_cast<int> (SERVER_COUNT * largeFlowRatio);
 
   if (transportProt.compare("DcTcp") == 0)
   {
@@ -515,17 +515,6 @@ int main(int argc, char *argv[])
 
   NS_LOG_INFO("Create nodes");
 
-  // Two leaves
-  Ptr<Node> leaf0 = CreateObject<Node>();
-  Ptr<Node> leaf1 = CreateObject<Node>();
-
-  // Two spines
-  Ptr<Node> spine0 = CreateObject<Node>();
-  Ptr<Node> spine1 = CreateObject<Node>();
-
-  // Additional spine for >2 paths
-  Ptr<Node> spine2 = CreateObject<Node>();
-
   // configurable
   NodeContainer spines;
   spines.Create(PATH_COUNT);
@@ -544,6 +533,7 @@ int main(int argc, char *argv[])
   Ipv4StaticRoutingHelper staticRoutingHelper;
   Ipv4GlobalRoutingHelper globalRoutingHelper;
   Ipv4LetFlowRoutingHelper letFlowRoutingHelper;
+  // Ipv4CongaRoutingHelper congaRoutingHelper;
 
   if (runMode == LetFlow)
   {
@@ -556,7 +546,16 @@ int main(int argc, char *argv[])
     internet.Install(spines);
     internet.Install(leaves);
   }
-  else if (runMode == ECMP)
+  // else if (runMode == CONGA || runMode == CONGA_FLOW || runMode == CONGA_ECMP) {
+  //   internet.SetRoutingHelper(staticRoutingHelper);
+  //   internet.Install(servers0);
+  //   internet.Install(servers1);
+
+  //   internet.SetRoutingHelper(congaRoutingHelper);
+  //   internet.Install(spines);
+  //   internet.Install(leaves);
+  // }
+  else
   {
     internet.SetRoutingHelper(globalRoutingHelper);
     Config::SetDefault("ns3::Ipv4GlobalRouting::PerflowEcmpRouting",
@@ -614,7 +613,9 @@ int main(int argc, char *argv[])
   std::vector<NetDeviceContainer> interestedNetDevices(PATH_COUNT);
   // setting toplogy (leaf, spine)
   ipv4.SetBase("10.1.1.0", "255.255.255.0");
+  // iterate over leaves
   for (int i = 0; i < 2; ++i) {
+    // iterate over spines
       for (int j = 0; j < PATH_COUNT; ++j) {
           // Set datarate (slow/fast) according to threshold
           if (j < fastPathThreshold) {
@@ -626,7 +627,7 @@ int main(int argc, char *argv[])
           }
           NodeContainer nodeContainer = NodeContainer(leaves.Get(i), spines.Get(j));
           NetDeviceContainer netDeviceContainer = p2p.Install(nodeContainer);
-          Ipv4InterfaceContainer ipv4InterfaceContainer =ipv4.Assign(netDeviceContainer);
+          Ipv4InterfaceContainer ipv4InterfaceContainer = ipv4.Assign(netDeviceContainer);
           // need to clean this dirty code a bit  
           if (i == 0) interestedNetDevices[j] = netDeviceContainer;
 
@@ -726,10 +727,10 @@ int main(int argc, char *argv[])
   int flowCount = 0;
   // Install apps on servers under switch leaf0, large flows first
   install_applications(servers0, servers1, SERVER_COUNT, serversAddr1,
-                       attackerStart, endTime, flowSize, flowCount, compromised,
+                       attackerStart, endTime, flowCount, compromised,
                        offTime, onTime, attackerProt, attackerApp, attackerRate,
                        hostileFlows, attackerPacketSize, hostileFlowSize,
-                       largeFlowSize, smallFlowSize, largeFlowThreshold);
+                       largeFlowSize, smallFlowSize, smallFlows, smallFlowStartTime);
 
   NS_LOG_INFO("Total flow: " << flowCount);
 
@@ -741,12 +742,14 @@ int main(int argc, char *argv[])
 
   // XXX Link Monitor Test Code Starts
   Ptr<LinkMonitor> linkMonitor = Create<LinkMonitor>();
-  Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaf0, linkMonitor, compromisedAddress);
-  linkProbe->SetProbeName("Leaf 0");
-  linkProbe->SetCheckTime(MicroSeconds(100)); 
-  linkProbe->SetDataRateAll(DataRate(FAST_PATH_CAPACITY));
-  linkMonitor->Start(Seconds(startTime));
-  linkMonitor->Stop(Seconds(END_TIME));
+  if (monitorLinks) {
+    Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaves.Get(0), linkMonitor, compromisedAddress, SERVER_COUNT);
+    linkProbe->SetProbeName("Leaf 0");
+    linkProbe->SetCheckTime(MicroSeconds(150)); 
+    linkProbe->SetDataRateAll(DataRate(FAST_PATH_CAPACITY));
+    linkMonitor->Start(Seconds(startTime));
+    linkMonitor->Stop(Seconds(END_TIME));
+  }
 
   NS_LOG_INFO("Start simulation");
   Simulator::Stop(Seconds(END_TIME));
@@ -758,29 +761,29 @@ int main(int argc, char *argv[])
   std::stringstream linkMonitorFilename;
   std::stringstream flowLoggingFilename;
 
-  flowMonitorFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
-                      << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
+  flowMonitorFilename << id << "-letflow_configurable-" << fastPathCapacity << "-"
+                      << slowPathCapacity << "-" << fastPathThreshold << "-b" << buffer_size << "-" << SERVER_COUNT << "-" << PATH_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
-                      << letFlowFlowletTimeout << "-" << flowSize << "-"
+                      << letFlowFlowletTimeout << "-" << largeFlowSize << "-" << smallFlowSize << "-" << smallFlows << "-" << smallFlowStartTime << "-"
                       << (hostile == 0 ? "no_attacker" : "attacker") << "-"
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
                       << hostileFlows << "-" << hostileFlowSize << ".xml";
-  linkMonitorFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
-                      << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
+  linkMonitorFilename << id << "-letflow_configurable-" << fastPathCapacity << "-"
+                      << slowPathCapacity << "-" << fastPathThreshold << "-b" << buffer_size << "-" << SERVER_COUNT << "-" << PATH_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
-                      << letFlowFlowletTimeout << "-" << flowSize << "-"
+                      << letFlowFlowletTimeout << "-" << largeFlowSize << "-" << smallFlowSize << "-" << smallFlows << "-" << smallFlowStartTime << "-"
                       << (hostile == 0 ? "no_attacker" : "attacker") << "-"
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
                       << attackerProt << "-" << attackerApp << "-hflows-"
                       << hostileFlows << "-" << hostileFlowSize << ".out";
 
-  flowLoggingFilename << id << "-letflow_convergence-" << linkOneCapacity << "-"
-                      << linkTwoCapacity << "-b" << buffer_size << "-" << SERVER_COUNT << "-"
+  flowLoggingFilename << id << "-letflow_configurable-" << fastPathCapacity << "-"
+                      << slowPathCapacity << "-" << fastPathThreshold << "-b" << buffer_size << "-" << SERVER_COUNT << "-" << PATH_COUNT << "-"
                       << endTime << "-" << transportProt << "-"
-                      << letFlowFlowletTimeout << "-" << flowSize << "-"
+                      << letFlowFlowletTimeout << "-" << largeFlowSize << "-" << smallFlowSize << "-" << smallFlowStartTime << "-"
                       << (hostile == 0 ? "no_attacker" : "attacker") << "-"
                       << attackerRate << "-" << attackerStart << "-" << offTime
                       << "-" << onTime << "-" << attackerPacketSize << "-"
@@ -808,14 +811,17 @@ int main(int argc, char *argv[])
   os << "</Sim>\n";
   os.close();
 
-  linkMonitor->OutputToFile(linkMonitorFilename.str(),
-                            &LinkMonitor::DefaultFormat);
+  if (monitorLinks) {
+    linkMonitor->OutputToFile(linkMonitorFilename.str(),
+                              &LinkMonitor::DefaultFormat);
+  }
+
 
   // Flow logs if in LetFlow mode
   if (runMode == LetFlow) 
   {
     Ptr<Ipv4LetFlowRouting> letFlowLeaf0 =
-        letFlowRoutingHelper.GetLetFlowRouting(leaf0->GetObject<Ipv4>());
+        letFlowRoutingHelper.GetLetFlowRouting(leaves.Get(0)->GetObject<Ipv4>());
 
     assert(letFlowLeaf0->GetLetFlowHistory().enabled);
     std::vector<std::pair<Time, std::pair<std::map<uint32_t, uint32_t>,
@@ -823,7 +829,6 @@ int main(int argc, char *argv[])
         flows0 = letFlowLeaf0->ComputeNumberOfFlowsPerPort();
 
     // Ports we are interested in
-    //TODO: When extending to N ports we need to add all of them here.
     std::set<uint32_t> ports;
     for (int i = 0; i < PATH_COUNT; ++i) {
         ports.insert(interestedNetDevices[i].Get(0)->GetIfIndex());

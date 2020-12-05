@@ -2,6 +2,7 @@ from __future__ import division
 import sys
 import os
 import itertools
+import math
 from statistics import median, variance, mean
 try:
     from xml.etree import cElementTree as ElementTree
@@ -101,6 +102,10 @@ class Simulation(object):
             flow = Flow(flow_el)
             flow_map[flow.flowId] = flow
             self.flows.append(flow)
+            for elt in flow_el.findall("packetsDropped"):
+                if elt.attrib.get('reasonCode') == '3':
+                    flow.packetsDropped = int(elt.attrib.get('number'))
+
         for flow_cls in FlowClassifier_el.findall("Flow"):
             flowId = int(flow_cls.get('flowId'))
             flow_map[flowId].fiveTuple = FiveTuple(flow_cls)
@@ -161,6 +166,7 @@ def computeFct(file):
     best_fct = 0
 
     total_flow_tx = 0
+    total_dropped_packets = 0
     total_lost_packets = 0
     total_packets = 0
     total_rx_packets = 0
@@ -189,9 +195,14 @@ def computeFct(file):
     attacker_total_lost_packets = 0
     attacker_dropped_packets = 0
 
+    flow_bitrates = []
+    small_flow_bitrates = []
+    large_flow_bitrates = []
+
     flow_freq = {}
     flow_fct = {}
     sender_flow_fct = {}
+    small_flow_list = []
     
     for sim in sim_list:
         for flow in sim.flows:
@@ -216,14 +227,19 @@ def computeFct(file):
                 total_fct += flow.fct
                 total_packets += flow.txPackets
                 total_lost_packets += flow.lostPackets
+                total_dropped_packets += flow.packetsDropped
                 total_rx_packets += flow.rxPackets
                 total_flow_tx += flow.txBytes
+                flow_bitrates.append(flow.txBitrate)
                 if flow.txBytes > 10000000:
                     large_flow_count += 1
                     large_flow_total_fct += flow.fct
+                    large_flow_bitrates.append(flow.txBitrate)
                 if flow.txBytes < 100000:
                     small_flow_count += 1
                     small_flow_total_fct += flow.fct
+                    small_flow_bitrates.append(flow.txBitrate)
+                    small_flow_list.append(flow)
                 if flow.fct > worst_fct:
                     worst_fct = flow.fct
                 # Logging sender flow details
@@ -272,26 +288,34 @@ def computeFct(file):
                         'sender_above_median_avg_fct': mean(above_median),
                         'sender_below_median_avg_fct': mean(below_median)})
         results.update({'sender_avg_fct': total_fct_sender / total_flow_count_sender})        
-#         print ("Sender Avg Flow Size: %.4f" % (total_flow_tx_sender / total_flow_count_sender))
-#         print ("Sender Avg FCT: %.4f" % (total_fct_sender / total_flow_count_sender))
+        
     if large_flow_count_sender != 0:
         results.update({'sender_large_avg_fct': large_flow_total_fct_sender / large_flow_count_sender})
-#         print ("Large Flow Sender Avg FCT: %.4f" % (large_flow_total_fct_sender / large_flow_count_sender))
 
     if small_flow_count_sender != 0:
         results.update({'sender_small_avg_fct': small_flow_total_fct_sender / small_flow_count_sender})
     
     results.update({'avg_fct': (total_fct / flow_count)})
-#     print ("Avg Flow Size: %.4f" % (total_flow_tx / flow_count))
-#     print ("Avg FCT: %.4f\n" % (total_fct / flow_count))
+    results.update({'packetsDropped': total_dropped_packets})
+
+    results.update({'avg_bitrate': mean(flow_bitrates)})
+    
     if large_flow_count != 0:
         results.update({'large_flow_avg_fct':(large_flow_total_fct / large_flow_count)})
+        results.update({'large_avg_bitrate': mean(large_flow_bitrates)})
    
     if small_flow_count != 0:
-        results.update({'large_flow_avg_fct':(small_flow_total_fct / small_flow_count)})
+        small_flow_list.sort (key=lambda x: x.fct)
+        index_99 = int(math.ceil(len(small_flow_list) * 0.99)) - 1
+        results.update({'small_flow_tail_99': small_flow_list[index_99].fct})
+        results.update({'small_flow_avg_fct':(small_flow_total_fct / small_flow_count)})
+        results.update({'small_avg_bitrate': mean(small_flow_bitrates)})
 
     if attacker_flows > 0:
         results.update({'attacker_avg_fct':(attacker_fct / attacker_flows), 'attacker_tx_packets':attacker_total_packets, 'attacker_rx_packets':attacker_total_rx_packets, 'attacker_lost_packets':attacker_total_lost_packets})
+    
+    if attacker_large_flow_count > 0:
+        results.update({'attacker_large_avg_fct':(attacker_large_flow_total_fct / attacker_large_flow_count)})
         
     #results.update({'attacker_dropped_packets':attacker_dropped_packets})
     return results

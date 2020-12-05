@@ -744,7 +744,7 @@ int main(int argc, char *argv[])
 
   // XXX Link Monitor Test Code Starts
   Ptr<LinkMonitor> linkMonitor = Create<LinkMonitor>();
-  Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaf0, linkMonitor, compromisedAddress);
+  Ptr<Ipv4LinkProbe> linkProbe = Create<Ipv4LinkProbe>(leaf0, linkMonitor, compromisedAddress, 0);
   linkProbe->SetProbeName("Leaf 0");
   linkProbe->SetCheckTime(MicroSeconds(100)); 
   linkProbe->SetDataRateAll(DataRate(LINK_TWO_CAPACITY));

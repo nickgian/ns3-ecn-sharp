@@ -22,7 +22,7 @@ public:
 
   Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor);
 
-  Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor, Ipv4Address);
+  Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor, Ipv4Address, int);
 
   void SetDataRateAll (DataRate dataRate);
 
@@ -36,11 +36,11 @@ public:
 
   void PacketsInQueueLogger (uint32_t NPackets, uint32_t interface);
 
-  void BytesInQueueLogger (uint32_t NBytes, uint32_t interface);
+  // void BytesInQueueLogger (uint32_t NBytes, uint32_t interface);
 
-  void PacketsInQueueDiscLogger (uint32_t NPackets, uint32_t interface);
+  // void PacketsInQueueDiscLogger (uint32_t NPackets, uint32_t interface);
 
-  void BytesInQueueDiscLogger (uint32_t NBytes, uint32_t interface);
+  // void BytesInQueueDiscLogger (uint32_t NBytes, uint32_t interface);
 
   void CheckCurrentStatus ();
 
@@ -58,18 +58,18 @@ private:
   std::map<uint32_t, Ptr<Ipv4QueueProbe> > m_queueProbe;
 
   std::map<uint32_t, uint64_t> m_accumulatedTxBytes;
-  std::map<uint32_t, uint64_t> m_accumulatedDequeueBytes;
+  // std::map<uint32_t, uint64_t> m_accumulatedDequeueBytes;
 
   // Per interface, per flow, byte/packets sent.
-  std::map<uint32_t, std::map<uint32_t, std::pair<uint32_t, uint32_t> > >  m_flowTx;
+  // std::map<uint32_t, std::map<uint32_t, std::pair<uint32_t, uint32_t> > >  m_flowTx;
 
   std::map<uint32_t, uint32_t> m_NPacketsInQueue;
-  std::map<uint32_t, uint32_t> m_NBytesInQueue;
+  // std::map<uint32_t, uint32_t> m_NBytesInQueue;
 
-  std::map<uint32_t, uint32_t> m_NAttackerPacketsInQueue;
+  // std::map<uint32_t, uint32_t> m_NAttackerPacketsInQueue;
 
-  std::map<uint32_t, uint32_t> m_NPacketsInQueueDisc;
-  std::map<uint32_t, uint32_t> m_NBytesInQueueDisc;
+  // std::map<uint32_t, uint32_t> m_NPacketsInQueueDisc;
+  // std::map<uint32_t, uint32_t> m_NBytesInQueueDisc;
 
   std::map<uint32_t, DataRate> m_dataRate;
 

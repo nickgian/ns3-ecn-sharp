@@ -20,7 +20,7 @@ public:
   struct LinkStats
   {
     // The check time
-    Time        checkTime; // Checking flows every 50us - is that a good value for flowlet gap of 250us?
+    Time        checkTime; // Checking flows every 150us - is that a good value for flowlet gap of 250us?
 
     // The accumulated bytes transmitted on this link
     uint64_t    accumulatedTxBytes;
@@ -29,26 +29,26 @@ public:
     double      txLinkUtility;
 
     // The accumulated bytes dequeued on this link
-    uint64_t    accumulatedDequeueBytes;
+    // uint64_t    accumulatedDequeueBytes;
 
     // The utility of this link based on dequeue
-    double      dequeueLinkUtility;
+    // double      dequeueLinkUtility;
 
     uint32_t    packetsInQueue;
 
-    uint32_t    bytesInQueue;
+    // uint32_t    bytesInQueue;
 
-    uint32_t    attackerPacketsInQueue;
+    // uint32_t    attackerPacketsInQueue;
 
-    uint32_t    packetsInQueueDisc; // What's this?
+    // uint32_t    packetsInQueueDisc; // What's this?
 
-    uint32_t    bytesInQueueDisc;
+    // uint32_t    bytesInQueueDisc;
 
     // Per flow packet/byte transmission on every sample.
-    std::map<uint32_t, std::pair<uint32_t, uint32_t> > txFlow;
+    // std::map<uint32_t, std::pair<uint32_t, uint32_t> > txFlow;
 
     // Link Utilization per flow
-    std::map<uint32_t, double> txFlowUtil;
+    // std::map<uint32_t, double> txFlowUtil;
 
   };
 

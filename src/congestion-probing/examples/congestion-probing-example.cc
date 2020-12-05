@@ -17,7 +17,7 @@ std::string
 DefaultFormat (struct LinkProbe::LinkStats stat)
 {
   std::ostringstream oss;
-  oss<< stat.packetsInQueueDisc;
+  // oss<< stat.packetsInQueueDisc;
   return oss.str ();
 }
 

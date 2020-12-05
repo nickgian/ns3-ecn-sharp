@@ -104,16 +104,17 @@ LinkMonitor::DefaultFormat (struct LinkProbe::LinkStats stat)
   std::ostringstream oss;
   oss << stat.checkTime.As(Time::MS) << ", "
       << stat.txLinkUtility << ", "
-      << stat.packetsInQueue << ", "
-      << stat.bytesInQueue << ", "
-      << stat.attackerPacketsInQueue << ", "
-      << stat.packetsInQueueDisc << ", "
-      << stat.bytesInQueueDisc;
+      << stat.packetsInQueue;
+      // << stat.attackerPacketsInQueue;
+      // << stat.bytesInQueue << ", "
+      // << stat.packetsInQueueDisc << ", "
+      // << stat.bytesInQueueDisc;
 
-  for (std::map<uint32_t, double >::iterator it = stat.txFlowUtil.begin(); 
-        it != stat.txFlowUtil.end(); ++it) {
-          oss << ", " << it->first << ":" << (it->second);
-        }
+  // Per-flow utilization
+  // for (std::map<uint32_t, double >::iterator it = stat.txFlowUtil.begin(); 
+  //       it != stat.txFlowUtil.end(); ++it) {
+  //         oss << ", " << it->first << ":" << (it->second);
+  //       }
   oss << "\n";
   return oss.str ();
 }

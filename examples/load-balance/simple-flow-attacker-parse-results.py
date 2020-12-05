@@ -33,7 +33,7 @@ class Histogram(object):
 
 class Flow(object):
     __slots__ = ['flowId', 'delayMean', 'packetLossRatio', 'rxBitrate', 'txBitrate',
-                 'fiveTuple', 'packetSizeMean', 'probe_stats_unsorted',
+                 'fiveTuple', 'packetSizeMean', 'probe_stats_unsorted', 'packetsDropped',
                  'hopCount', 'flowInterruptionsHistogram', 'rx_duration', 'fct', 'txBytes', 'txPackets', 'lostPackets', 'rxPackets']
     def __init__(self, flow_el):
         self.flowId = int(flow_el.get('flowId'))
@@ -47,6 +47,7 @@ class Flow(object):
         self.txPackets = txPackets
         self.rx_duration = rx_duration
         self.rxPackets = rxPackets
+        self.packetsDropped = 0
         if fct > 0:
             self.fct = fct
         else:
@@ -97,9 +98,14 @@ class Simulation(object):
             flow = Flow(flow_el)
             flow_map[flow.flowId] = flow
             self.flows.append(flow)
+            for elt in flow_el.findall("packetsDropped"):
+                if elt.attrib.get('reasonCode') == '3':
+                    flow.packetsDropped = int(elt.attrib.get('number'))
+
         for flow_cls in FlowClassifier_el.findall("Flow"):
             flowId = int(flow_cls.get('flowId'))
             flow_map[flowId].fiveTuple = FiveTuple(flow_cls)
+        
 
         for probe_elem in simulation_el.findall("FlowProbes/FlowProbe"):
             probeId = int(probe_elem.get('index'))
@@ -189,6 +195,7 @@ def main(argv):
     total_lost_packets_sender = 0
     total_packets_sender = 0
     total_rx_packets_sender = 0
+    total_packets_dropped = 0
 
     attacker_fct = 0
     attacker_flows = 0
@@ -223,8 +230,10 @@ def main(argv):
                 total_fct += flow.fct
                 total_packets += flow.txPackets
                 total_lost_packets += flow.lostPackets
+                total_packets_dropped += flow.packetsDropped
                 total_rx_packets += flow.rxPackets
                 total_flow_tx += flow.txBytes
+
                 if flow.txBytes > 10000000:
                     large_flow_count += 1
                     large_flow_total_fct += flow.fct

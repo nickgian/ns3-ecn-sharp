@@ -1,4 +1,5 @@
 import bisect
+from itertools import tee
 # Parsing Flow Information
 
 def parseTime(s):
@@ -94,6 +95,7 @@ def measureBalanceAvg(samples):
 # |(c/TotalCapacity) * totalFlows - f| 
 # For a single time sample.
 def cabDistance(capacity, flows, totalCapacity, totalFlows):
+#     print(abs(capacity/totalCapacity * totalFlows - flows))
     return abs(capacity/totalCapacity * totalFlows - flows)
 
 # time is a vector of floats
@@ -109,12 +111,41 @@ def measureBalance(window, time, flowsPerPort, capacities):
     perPortDistance = []
     # Compute per port distance for every time sample.
     for port, flowsOnPort in flowsPerPort.items():
-        perPortDistance.append([cabDistance(capacities.get(port), f, totalCapacity, numberOfFlows) for f in flowsOnPort[i:j]])
+#         print(str(capacities.get(port)) +' flows: ' + str([f for f in flowsOnPort[i:j]]))
+        perPortDistance.append([cabDistance(capacities.get(port, 0), f, totalCapacity, numberOfFlows) for f in flowsOnPort[i:j]])
     result = {}
     result.update({'cab': measureBalanceAvg([sum(i) for i in zip(*perPortDistance)])})
+    result.update({'avgDistance': measureBalanceAvg([sum(i)/len(i) for i in zip(*perPortDistance)])})
     result.update({'chebysev': measureBalanceAvg([max(i) for i in zip(*perPortDistance)])})
     return result
+
+# We only count reductions in number of flows to avoid double counting.
+def countChanges(prev,curr):
+    if curr < prev:
+        return prev - curr
+    else:
+        return 0
     
+def pairwise(iterable):
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
+def avgFlowChanges(window, time, flowsPerPort):
+    minTime = window[0]
+    maxTime = window[1]
+    # Find the indices corresponding to the given time
+    i = bisect.bisect_left(time, minTime)
+    j = bisect.bisect_left(time, maxTime)
+    perPortChanges = []
+    for port, flowsOnPort in flowsPerPort.items():
+        changes = []
+        for prev, cur in pairwise(flowsOnPort[i:j]):
+            changes.append(countChanges(prev, cur))
+        perPortChanges.append(changes)
+    result = {}
+    result.update({'flowChanges': measureBalanceAvg([sum(i) for i in zip(*perPortChanges)])})
+    return result
     
 def parseLog(ls):
     timeAxis = []

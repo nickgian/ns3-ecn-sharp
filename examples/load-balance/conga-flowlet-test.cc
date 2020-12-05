@@ -128,7 +128,7 @@ DefaultFormat (struct LinkProbe::LinkStats stat)
       //<< stat.bytesInQueueDisc;
   /*oss << stat.packetsInQueue;*/
   oss << stat.txLinkUtility << ",";
-  oss << stat.packetsInQueueDisc;
+//   oss << stat.packetsInQueueDisc;
   return oss.str ();
 }
 

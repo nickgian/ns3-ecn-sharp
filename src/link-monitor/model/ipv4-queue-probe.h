@@ -27,11 +27,11 @@ public:
 
   void PacketsInQueueLogger (uint32_t oldValue, uint32_t newValue);
 
-  void BytesInQueueLogger (uint32_t oldValue, uint32_t newValue);
+  // void BytesInQueueLogger (uint32_t oldValue, uint32_t newValue);
 
-  void PacketsInQueueDiscLogger (uint32_t oldValue, uint32_t newValue);
+  // void PacketsInQueueDiscLogger (uint32_t oldValue, uint32_t newValue);
 
-  void BytesInQueueDiscLogger (uint32_t oldValue, uint32_t newValue);
+  // void BytesInQueueDiscLogger (uint32_t oldValue, uint32_t newValue);
 
 private:
 
