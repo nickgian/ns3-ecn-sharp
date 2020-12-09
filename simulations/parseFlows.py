@@ -58,28 +58,6 @@ def parseLogLine(s):
         ports.update({parsed[0]:parsed[1]})
         idx += 1
         parsed = tryParseFlowCount(s, idx)
-
-    # attackerPort1 = tryParseAttackerPort(s, 1) # attacker flow 1
-    # attackerPort2 = tryParseAttackerPort(s, 2) # attacker flow 2
-    # if attackerPort1 == -1:
-    #     s1 = tryParseFlowCount(s, 1)
-    #     s2 = tryParseFlowCount(s, 2)
-    #     ports.update({s1[0]:s1[1]})
-    #     ports.update({s2[0]:s2[1]})
-    # else:
-    #     if attackerPort2 == -1:
-    #         s1 = tryParseFlowCount(s, 2)
-    #         s2 = tryParseFlowCount(s, 3)
-    #         ports.update({s1[0]:s1[1]})
-    #         ports.update({s2[0]:s2[1]})
-    #         attackerPorts.insert(0, attackerPort1)
-    #     else:
-    #         s1 = tryParseFlowCount(s, 3)
-    #         s2 = tryParseFlowCount(s, 4)
-    #         ports.update({s1[0]:s1[1]})
-    #         ports.update({s2[0]:s2[1]})
-    #         attackerPorts.insert(0, attackerPort2)
-    #         attackerPorts.insert(0, attackerPort1)
         
     normalizedPorts = {k: normalize(k, v, attackerPorts) for k, v in ports.items()}
     return (time, ports, normalizedPorts, attackerPorts)
@@ -151,10 +129,6 @@ def parseLog(ls):
     timeAxis = []
     plots = {} # Mapping ports to lists of number of flows.
     normalizedPlots = {}
-    # plotOne = []
-    # plotTwo = []
-    # normalizedPlotOne = []
-    # normalizedPlotTwo = []
     attackerPorts = {}
 
     parsedLs = [parseLogLine(s) for s in ls]
@@ -181,10 +155,6 @@ def parseLog(ls):
                 current.append(p)
             except:
                 attackerPorts.update({flowId:[p]})
-            # attackerPorts.update({flowId:})
-            # porti = attackerPorts.get(i, [])
-            # porti.append(parsedLine[3][i])
-            # attackerPorts.update({i: porti})
     
     #adding missing samples from late-started flows
     samples = len(timeAxis)
@@ -203,6 +173,7 @@ def readLog(f):
 # Parsing Queue Information
 
 
+# Per flow-stuff, deprecated.
 def buildFlowUtils(flowTxUtil, flowSet):
     result = {}
     for flow in flowSet:
@@ -221,51 +192,64 @@ def parseQueueLogLine(s):
     time = parseTime(s[0])
     txUtil = float(s[1])
     queuePackets = float(s[2])
-    flowTxUtil = {}
-    flowSet = set()
-    for string in s[7:]:
-        flow = string.split(":")
-        flowTxUtil.update({flow[0]:flow[1]})
-        flowSet.add(flow[0])
-    return (time, txUtil, queuePackets, flowSet, flowTxUtil)
+    return (time, txUtil, queuePackets)
     
 def parseQueueLog(ls):
-    ports = {}
+    nodes = {} # map from node to ports
+    ports = {} # map from ports to utilizations
     timeAxis = []
     txUtilPlot = []
     queuePlot = []
-    flowTxUtilPlot = []
-    flowSet = set() # Set of flow ids that have appeared throughout the simulation.
     firstIter = True
     portIdx = 0
+    nodeIdx = ''
     for s in ls:
-        if s.strip().startswith('Port'):
-            if not(firstIter): # if this is not the first iteration
-                ports.update({portIdx: (timeAxis.copy(), txUtilPlot.copy(), queuePlot.copy(), flowTxUtilPlot.copy())}) #store the info
+        if s.strip().startswith('Spine') or s.strip().startswith('Leaf'):
+            # If a new spine is encountered and it's not the first one, then store previous logs.
+            if not(firstIter):
+                ports.update({portIdx: (timeAxis.copy(), txUtilPlot.copy(), queuePlot.copy())}) # add last port
+                nodes.update({nodeIdx: ports.copy()}) #keep a copy of ports for the previous switch.
+                # reset the ports and firstIter
+                ports = {}
+                firstIter = True
+
+            # update node id
+            node = s.strip().split(' ')
+            nodeIdx = node[0] + node[1] # get the node id
+
+        # If it's a port    
+        elif s.strip().startswith('Port'):
+            if not(firstIter): # if this is not the first port iterated for this switch
+                ports.update({portIdx: (timeAxis.copy(), txUtilPlot.copy(), queuePlot.copy())}) #store the info for this port.
             else:
-                firstIter = False
+                firstIter = False # declare that we are past the first port, and start collecting info.
             portIdx = s.strip().split(' ')[1] #get the port id
-            # and reset the time/tx/queue info.
+            # and reset the time/tx/queue info since we are parsing info for a new port.
             timeAxis = []
             txUtilPlot = []
             queuePlot = []
-            flowTxUtilPlot = []
         else:
-            # ignore empty lines and lines that declare the leaf 
-            # (we only care about 1 leaf for now, needs fix for more involved networks)
-            if not(len(s) == 0 or s.isspace() or s.startswith('Leaf')):
+            # ignore empty lines
+            if not(len(s) == 0 or s.isspace()):
                 parsedLine = parseQueueLogLine(s)
                 timeAxis.append(parsedLine[0])
                 txUtilPlot.append(parsedLine[1])
                 queuePlot.append(parsedLine[2])
-               # flowSet.update(parsedLine[3])
-               # flowTxUtilPlot.append(parsedLine[4])
-    #ports.update((pi, (v[0], v[1], v[2], buildFlowUtils(v[3], flowSet))) for pi,v in ports.items())
-    return ports
+
+    # Add last switch info
+    ports.update({portIdx: (timeAxis.copy(), txUtilPlot.copy(), queuePlot.copy())}) # add last port
+    nodes.update({nodeIdx: ports}) #no need to copy for the last one
+    return nodes
         
 
 def readQueueLog(f):
-    with open(f) as log_file:
-        return parseQueueLog(log_file.readlines())
+    try:
+        h = open(f)
+    except OSError:
+        return {}
+
+    with h:
+        return parseQueueLog(h.readlines())
+        
     
     

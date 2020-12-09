@@ -76,6 +76,8 @@ private:
   Ptr<Ipv4L3Protocol> m_ipv4;
 
   Ipv4Address m_attackerAddress;
+
+  int m_interfacesToIgnore;
 };
 
 }

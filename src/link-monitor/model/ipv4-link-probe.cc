@@ -28,14 +28,15 @@ Ipv4LinkProbe::GetTypeId (void)
 Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor)
     :LinkProbe (linkMonitor),
      m_checkTime (MicroSeconds (150)),
-     m_attackerAddress(Ipv4Address::GetZero())
+     m_attackerAddress(Ipv4Address::GetZero()),
+     m_interfacesToIgnore(0)
 {
   NS_LOG_FUNCTION (this);
 
   m_ipv4 = m_ipv4 = node->GetObject<Ipv4L3Protocol> ();
 
   // Notice, the interface at 0 is loopback, we simply ignore it
-  for (uint32_t interface = 1; interface < m_ipv4->GetNInterfaces (); ++interface)
+  for (uint32_t interface = 1 + m_interfacesToIgnore; interface < m_ipv4->GetNInterfaces (); ++interface)
   {
     m_accumulatedTxBytes[interface] = 0;
     // m_accumulatedDequeueBytes[interface] = 0;
@@ -92,7 +93,8 @@ Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor)
 Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor, Ipv4Address attackerAddress, int interfacesToIgnore)
     :LinkProbe (linkMonitor),
      m_checkTime (MicroSeconds (150)),
-     m_attackerAddress (attackerAddress)
+     m_attackerAddress (attackerAddress),
+     m_interfacesToIgnore(interfacesToIgnore)
 {
   NS_LOG_FUNCTION (this);
 
@@ -157,7 +159,7 @@ Ipv4LinkProbe::Ipv4LinkProbe (Ptr<Node> node, Ptr<LinkMonitor> linkMonitor, Ipv4
 void
 Ipv4LinkProbe::SetDataRateAll (DataRate dataRate)
 {
-  for (uint32_t interface = 1; interface < m_ipv4->GetNInterfaces (); ++interface)
+  for (uint32_t interface = 1 + m_interfacesToIgnore; interface < m_ipv4->GetNInterfaces (); ++interface)
   {
     m_dataRate[interface] = dataRate;
   }
@@ -290,7 +292,7 @@ Ipv4LinkProbe::PacketsInQueueLogger (uint32_t NPackets, uint32_t interface)
 void
 Ipv4LinkProbe::CheckCurrentStatus ()
 {
-  for (uint32_t interface = 1; interface < m_ipv4->GetNInterfaces (); ++interface)
+  for (uint32_t interface = 1 + m_interfacesToIgnore; interface < m_ipv4->GetNInterfaces (); ++interface)
   {
     uint64_t lastTxBytes = 0;
     // uint64_t lastDequeueBytes = 0;

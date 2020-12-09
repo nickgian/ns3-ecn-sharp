@@ -13,84 +13,6 @@ from parseFlows import *
 from parseXml import *
 
 
-
-def interactive_legend(ax=None):
-    if ax is None:
-        ax = plt.gca()
-    if ax.legend_ is None:
-        ax.legend()
-
-    return InteractiveLegend(ax.get_legend())
-
-class InteractiveLegend(object):
-    def __init__(self, legend):
-        self.legend = legend
-        self.fig = legend.axes.figure
-
-        self.lookup_artist, self.lookup_handle = self._build_lookups(legend)
-        self._setup_connections()
-
-        self.update()
-
-    def _setup_connections(self):
-        for artist in self.legend.texts + self.legend.legendHandles:
-            artist.set_picker(10) # 10 points tolerance
-
-        self.fig.canvas.mpl_connect('pick_event', self.on_pick)
-        self.fig.canvas.mpl_connect('button_press_event', self.on_click)
-
-    def _build_lookups(self, legend):
-        labels = [t.get_text() for t in legend.texts]
-        handles = legend.legendHandles
-        label2handle = dict(zip(labels, handles))
-        handle2text = dict(zip(handles, legend.texts))
-
-        lookup_artist = {}
-        lookup_handle = {}
-        for artist in legend.axes.get_children():
-            if artist.get_label() in labels:
-                handle = label2handle[artist.get_label()]
-                lookup_handle[artist] = handle
-                lookup_artist[handle] = artist
-                lookup_artist[handle2text[handle]] = artist
-
-        lookup_handle.update(zip(handles, handles))
-        lookup_handle.update(zip(legend.texts, handles))
-
-        return lookup_artist, lookup_handle
-
-    def on_pick(self, event):
-        handle = event.artist
-        if handle in self.lookup_artist:
-
-            artist = self.lookup_artist[handle]
-            artist.set_visible(not artist.get_visible())
-            self.update()
-
-    def on_click(self, event):
-        if event.button == 3:
-            visible = False
-        elif event.button == 2:
-            visible = True
-        else:
-            return
-
-        for artist in self.lookup_artist.values():
-            artist.set_visible(visible)
-        self.update()
-
-    def update(self):
-        for artist in self.lookup_artist.values():
-            handle = self.lookup_handle[artist]
-            if artist.get_visible():
-                handle.set_visible(True)
-            else:
-                handle.set_visible(False)
-        self.fig.canvas.draw()
-
-
-
-
 def plotFlows(flows, xrange, plotDetails):
     fig, ax = plt.subplots(figsize=(22, 12))
     ax.set_xlim(xrange[0], xrange[1])
@@ -134,19 +56,7 @@ def plotNormalizedFlowsPorts(flows, xrange, plotDetails, ports):
     plt.ylabel('Numer of flows')
     plt.xlabel('Time (ms)')
     plt.show()  
-    
-# Not used
-def plotBalance(flows, xrange, plotDetails):
-    fig, ax = plt.subplots(figsize=(22, 12))
-    ax.set_xlim(xrange[0], xrange[1])
-    ax.set_ylim(0, int(plotDetails.get('servers'))+1)
-    ax.plot(flows[0], [a-b for a, b in zip(flows[4], flows[3])], 'C6', label='Flow balance')
-    ax.legend()
-    ax.set_title('Flow Balance: ' + plotDetails.get('title'), color='C0')
-    plt.ylabel('Numer of flows')
-    plt.xlabel('Time (ms)')
-    plt.show()
-    
+        
 def plotAllFlows(flows, xrange, plotDetails):
     plotFlows(flows, xrange, plotDetails)
     plotNormalizedFlows(flows, xrange, plotDetails)
@@ -170,7 +80,7 @@ def plotAttacker(flows, xrange, plotDetails):
 # pi[0]: time
 # pi[1]: txUtilization
 # pi[2]: packets in queue
-# pi[3]: txUtilization per flow
+# TODO: update to work over multiple nodes.
 def plotQueue(ports, xrange, plotDetails):
     for idx, (port, info) in enumerate(ports.items()):
         fig, ax = plt.subplots(figsize=(22, 12))
@@ -307,8 +217,7 @@ def parseSimulationFiles(name):
     link_file = name + ".out"
     xml_file = name + ".xml"
     parse_flows = readLog(flows_file)
-    #parse_queues = readQueueLog(link_file)
-    parse_queues = []
+    parse_queues = readQueueLog(link_file) # if no queue is present
     parse_xml = computeFct(xml_file)
     return (parse_flows, parse_queues, getPlotDetails(name), parse_xml)
 
@@ -325,67 +234,8 @@ def plotSimulationRange(log, xrange):
     #plotTxUtil(log[1], xrange, log[2])
   #  plotTxFlowUtil(log[1], xrange, log[2])
 
-
 def plotSimulation(log):
     plotSimulationRange(log, (0, 4200))
-    
-def bestAvgFct(log):
-    return log[3].get('avg_fct')
-
-def worstSenderAvgFct(log):
-    return -log[3].get('sender_avg_fct')
-
-
-def getBaseLine(df):
-    return df.loc[(df['offTime'] == '0') & (df['AttackerProt'] == 'Tcp')]
-
-def isMore(base, cur, thresh):
-    return cur >= base*(1+thresh)
-
-def show(df, caption):
-    base = getBaseLine(df)
-    return df.style.\
-        set_caption(caption).\
-        format({'AttackerSendPackets': "{:,}"}).\
-        format({'BufferDroppedPackets': "{:,}"}).\
-        apply(lambda x:[('background-color: #E6584F' if isMore(float(base.SenderAvgFct),float(v),0.2) else \
-                         ('background-color: #FAE4A1' if isMore(float(base.SenderAvgFct),float(v),0.10) else \
-                          ('background-color:#61B65F' if isMore(float(v), float(base.SenderAvgFct),0.0) else ''))) for v in x], subset=['SenderAvgFct']).\
-        apply(lambda x: ['background: #71A6D1' if int(x['offTime']) == 0 else '' for i in x], axis=1)
-
-
-# sim[0]: parseFlows
-    #sim[0][0]: time, sim[0][1]: portToFlows, sim[0][2]: normalizedPortsToFlows, sim[0][3]: attackerFlowsToPorts
-#sim[1]: queue and link utilization info
-#sim[2]: plot info
-#sim[3]: flow completion info
-def buildPandaRow(window, sim):
-    keys = ['offTime','onTime', 'AttackerRate', 'AttackerFlows', 'flowlet','AttackerProt']
-    result = { k: sim[2][k] for k in keys }
-    
-    capacities = sim[2].get('capacities')
-    time = sim[0][0]
-    flowsPerPort = sim[0][2] #normalized flows per port
-    balance = measureBalance(window, time, flowsPerPort, capacities)
-    changes = avgFlowChanges(window, time, flowsPerPort)
-    result.update({'LoadBalanceSum':float(balance.get('cab'))})
-    result.update({'LoadBalanceMax':float(balance.get('chebysev'))})
-    result.update({'LoadBalanceAvg':float(balance.get('avgDistance'))})
-    result.update({'FlowChanges':float(changes.get('flowChanges'))})
-    result.update({'SenderAvgFct':float(sim[3].get('sender_avg_fct'))})
-    result.update({'BufferDroppedPackets':int(sim[3].get('packetsDropped'))})
-#     result.update({'SenderVarianceFct':sim[3].get('sender_variance_fct')})
-#     result.update({'AttackerSendPackets':int(sim[3].get('attacker_tx_packets'))})
-    result.update({'AttackerLargeAvgFct':float(sim[3].get('attacker_large_avg_fct'))})
-#     result.update({'AttackerWasteRatio':float(sim[3].get('attacker_lost_packets'))/float(sim[3].get('attacker_tx_packets'))})
-    result.update({'AttackerLostPackets':int(sim[3].get('attacker_lost_packets'))})
-    # result.update({'AttackerReceivedPackets':sim[3].get('attacker_rx_packets')})
-    return result
-
-def buildPanda(window, simulations):
-    df = pd.DataFrame([buildPandaRow(window, sim) for sim in simulations])
-    return df
-
 
 def getCongaPlotDetails(filename):
     components    = filename.split('-')
@@ -421,56 +271,36 @@ def getCongaPlotDetails(filename):
            }
 
 def parseCongaSimulationFiles(name):
-    xml_file = name
-    parse_xml = computeFct(xml_file)
-    return (getCongaPlotDetails(name), parse_xml)
-
-
-def showConga(df, caption):
-    base = getBaseLine(df)
-    return df.style.\
-        set_caption(caption).\
-        format({'AttackerSendPackets': "{:,}"}).\
-        format({'BufferDroppedPackets': "{:,}"}).\
-        apply(lambda x:[('background-color: #E6584F' if isMore(float(base.AvgFct),float(v),0.25) else \
-                         ('background-color: #FAE4A1' if isMore(float(base.AvgFct),float(v),0.15) else \
-                          ('background-color:#61B65F' if isMore(float(v), float(base.AvgFct),0.0) else ''))) for v in x], subset=['AvgFct']).\
-        apply(lambda x:[('background-color: #E6584F' if isMore(float(base.SmallAvgFct),float(v),0.20) else \
-                         ('background-color: #FAE4A1' if isMore(float(base.SmallAvgFct),float(v),0.10) else \
-                          ('background-color:#61B65F' if isMore(float(v), float(base.SmallAvgFct),0.0) else ''))) for v in x], subset=['SmallAvgFct']).\
-        apply(lambda x:[('background-color: #E6584F' if isMore(float(base.LargeAvgFct),float(v),0.20) else \
-                         ('background-color: #FAE4A1' if isMore(float(base.LargeAvgFct),float(v),0.10) else \
-                          ('background-color:#61B65F' if isMore(float(v), float(base.LargeAvgFct),0.0) else ''))) for v in x], subset=['LargeAvgFct']).\
-        apply(lambda x: ['background: #71A6D1' if int(x['offTime']) == 0 else '' for i in x], axis=1)
+    xml_file = name + ".xml"
+    link_file = name + "-link-utility.out"
+    parse_xml =  computeFct(xml_file)
+    parse_queues = readQueueLog(link_file) # if no queue is present
+    return (getCongaPlotDetails(name), parse_xml, parse_queues)
 
 
 
-def buildCongaPandaRow(sim):
-    keys = ['offTime','onTime', 'load', 'AttackerRate', 'flowlet','AttackerProt']
-    result = { k: sim[0][k] for k in keys }
-    
-    #result.update({'SenderAvgFct':float(sim[1].get('sender_avg_fct'))})
-    #result.update({'SenderVarianceFct':sim[1].get('sender_variance_fct')})
-    #result.update({'SenderSmallAvgFct':float(sim[1].get('sender_small_avg_fct'))})
-    #result.update({'SenderLargeAvgFct':float(sim[1].get('sender_large_avg_fct'))})
-    result.update({'AvgFct':float(sim[1].get('avg_fct'))})
-    #result.update({'SenderVarianceFct':sim[1].get('sender_variance_fct')})
-    result.update({'SmallAvgFct':float(sim[1].get('small_flow_avg_fct', 0.0))})
-    result.update({'Tail99':float(sim[1].get('small_flow_tail_99', 0.0))})
-    result.update({'LargeAvgFct':float(sim[1].get('large_flow_avg_fct'))})
-    result.update({'BufferDroppedPackets':int(sim[1].get('packetsDropped'))})
-    result.update({'AttackerSendPackets':int(sim[1].get('attacker_tx_packets'))})
-    result.update({'AttackerLargeAvgFct':float(sim[1].get('attacker_large_avg_fct'))})
+### Plot link info
 
-    result.update({'AvgThroughput':int(sim[1].get('avg_bitrate', 0))/1000000 })
-    result.update({'SmallAvgThroughput':int(sim[1].get('small_avg_bitrate', 0))/1000000})
-    result.update({'LargeAvgThroughput':int(sim[1].get('large_avg_bitrate', 0))/1000000})
-
-    #result.update({'AttackerWasteRatio':float(sim[1].get('attacker_lost_packets'))/float(sim[1].get('attacker_tx_packets'))})
-    # result.update({'AttackerLostPackets':int(sim[3].get('attacker_lost_packets'))})
-    # result.update({'AttackerReceivedPackets':sim[3].get('attacker_rx_packets')})
+def switchImbalance(ports):
+    util = {k: info[1] for k, info in ports.items()}
+    result = []
+    for y in zip(*util.values()):
+        minimum = min(y)
+        maximum = max(y)
+        avg = mean(y)
+        result.append((maximum-minimum)/avg if avg != 0 else 0)
     return result
 
-def buildCongaPanda(simulations):
-    df = pd.DataFrame([buildCongaPandaRow(sim) for sim in simulations])
-    return df
+def plotImbalance(sims, switchName):
+    fig, ax = plt.subplots(figsize=(22, 12))
+    for i, sim in enumerate(sims):
+        data = switchImbalance(sim[2].get(switchName, []))
+        data_sorted = np.sort(data)
+
+        # calculate the proportional values of samples
+        p = 1. * np.arange(len(data)) / (len(data) - 1)
+
+        ax.plot(data_sorted, p, 'C' + str(i), label='sim(' + str(i) +')')
+    ax.legend()
+    plt.xlabel('Utilization Imbalance')
+    plt.ylabel('$p$')

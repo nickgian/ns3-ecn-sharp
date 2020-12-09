@@ -562,8 +562,6 @@ int main(int argc, char *argv[]) {
   int hostileFlows = 1;
   std::string attackerApp = "OnOff";
 
-  bool linkMonitorEnabled = false;
-
   CommandLine cmd;
   cmd.AddValue("ID", "Running ID", id);
   cmd.AddValue("StartTime", "Start time of the simulation", START_TIME);
@@ -743,7 +741,6 @@ int main(int argc, char *argv[]) {
                 "What application is the attacker using (Bulk or OnOff)",
                 attackerApp);
  
-  cmd.AddValue("linkMonitor", "Whether to enable the link monitor (default: false)", linkMonitorEnabled);
   cmd.Parse(argc, argv);
 
   uint64_t SPINE_LEAF_CAPACITY = spineLeafCapacity * LINK_CAPACITY_BASE;
@@ -1500,7 +1497,6 @@ int main(int argc, char *argv[]) {
   /* Nick: Create set of compromised leafs */
 
   std::set<int> compromised;
-  Ipv4Address compromisedAddress;
 
   // Let's consider server 0 as compromised.
   if (hostile) {
@@ -1508,7 +1504,7 @@ int main(int argc, char *argv[]) {
     Ptr<Node> compromisedServer = servers.Get(0);
     Ptr<Ipv4> ipv4 = compromisedServer->GetObject<Ipv4>();
     Ipv4InterfaceAddress compromisedInterface = ipv4->GetAddress(1, 0);
-    compromisedAddress = compromisedInterface.GetLocal();
+    Ipv4Address compromisedAddress = compromisedInterface.GetLocal();
     compromisedAddress.Print(std::cout);
   }
 
@@ -1535,32 +1531,30 @@ int main(int argc, char *argv[]) {
   FlowMonitorHelper flowHelper;
   flowMonitor = flowHelper.InstallAll();
 
-  Ptr<LinkMonitor> linkMonitor = Create<LinkMonitor>();
-  if (linkMonitorEnabled) {
-    NS_LOG_INFO("Enabling link monitor");
+  // NS_LOG_INFO("Enabling link monitor");
 
-    // for (int i = 0; i < SPINE_COUNT; i++) {
-    //   std::stringstream name;
-    //   name << "Spine " << i;
-    //   Ptr<Ipv4LinkProbe> spineLinkProbe =
-    //       Create<Ipv4LinkProbe>(spines.Get(i), linkMonitor);
-    //   spineLinkProbe->SetProbeName(name.str());
-    //   spineLinkProbe->SetCheckTime(Seconds(0.0002));
-    //   spineLinkProbe->SetDataRateAll(DataRate(SPINE_LEAF_CAPACITY));
-    // }
-    for (int i = 0; i < LEAF_COUNT; i++) {
-      std::stringstream name;
-      name << "Leaf " << i;
-      Ptr<Ipv4LinkProbe> leafLinkProbe =
-          Create<Ipv4LinkProbe>(leaves.Get(i), linkMonitor, compromisedAddress, SERVER_COUNT);
-      leafLinkProbe->SetProbeName(name.str());
-      leafLinkProbe->SetCheckTime(Seconds(0.0002));
-      leafLinkProbe->SetDataRateAll(DataRate(SPINE_LEAF_CAPACITY));
-    }
+  // Ptr<LinkMonitor> linkMonitor = Create<LinkMonitor>();
+  // for (int i = 0; i < SPINE_COUNT; i++) {
+  //   std::stringstream name;
+  //   name << "Spine " << i;
+  //   Ptr<Ipv4LinkProbe> spineLinkProbe =
+  //       Create<Ipv4LinkProbe>(spines.Get(i), linkMonitor);
+  //   spineLinkProbe->SetProbeName(name.str());
+  //   spineLinkProbe->SetCheckTime(Seconds(0.01));
+  //   spineLinkProbe->SetDataRateAll(DataRate(SPINE_LEAF_CAPACITY));
+  // }
+  // for (int i = 0; i < LEAF_COUNT; i++) {
+  //   std::stringstream name;
+  //   name << "Leaf " << i;
+  //   Ptr<Ipv4LinkProbe> leafLinkProbe =
+  //       Create<Ipv4LinkProbe>(leaves.Get(i), linkMonitor);
+  //   leafLinkProbe->SetProbeName(name.str());
+  //   leafLinkProbe->SetCheckTime(Seconds(0.01));
+  //   leafLinkProbe->SetDataRateAll(DataRate(SPINE_LEAF_CAPACITY));
+  // }
 
-    linkMonitor->Start(Seconds(START_TIME));
-    linkMonitor->Stop(Seconds(END_TIME));
-  }
+  // linkMonitor->Start(Seconds(START_TIME));
+  // linkMonitor->Stop(Seconds(END_TIME));
 
   flowMonitor->CheckForLostPackets();
 
@@ -1770,10 +1764,9 @@ int main(int argc, char *argv[]) {
   os << "</Sim>\n";
   os.close();
 
-  if (linkMonitorEnabled) {
-    linkMonitor->OutputToFile(linkMonitorFilename.str(),
-                            &LinkMonitor::DefaultFormat);
-  }
+  // linkMonitor->OutputToFile(linkMonitorFilename.str(),
+  //                           &LinkMonitor::DefaultFormat);
+
   Simulator::Destroy();
   free_cdf(cdfTable);
   NS_LOG_INFO("Stop simulation");
